@@ -1,0 +1,446 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helper Primitives ---
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidLongId(id) {
+      return id is string && id.size() >= 3 && id.size() <= 260 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- Entity Validation Blueprints ---
+    function isValidPlayerProfile(data, uid) {
+      return data.keys().hasAll([
+        'uid', 'username', 'bio', 'region', 'preferredPlatform', 'avatarCode',
+        'photoUrl', 'rating', 'wins', 'losses', 'draws', 'matchesPlayed',
+        'winStreak', 'bestStreak', 'xp', 'achievements', 'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'uid', 'username', 'bio', 'region', 'preferredPlatform', 'avatarCode',
+        'photoUrl', 'rating', 'wins', 'losses', 'draws', 'matchesPlayed',
+        'winStreak', 'bestStreak', 'xp', 'achievements', 'createdAt', 'updatedAt'
+      ])
+      && data.uid == uid
+      && data.username is string && data.username.size() >= 2 && data.username.size() <= 24
+      && data.bio is string && data.bio.size() <= 160
+      && data.region in ['NA-East', 'NA-West', 'EU-West', 'APAC', 'Global']
+      && data.preferredPlatform in ['Desktop', 'Mobile', 'Cross-Play']
+      && data.avatarCode in ['google', 'emblem-cobalt', 'emblem-amber', 'emblem-emerald', 'emblem-slate']
+      && data.photoUrl is string && data.photoUrl.size() <= 512
+      && (data.photoUrl == '' || data.photoUrl.matches('^https://.*'))
+      && data.rating is number && data.rating >= 100 && data.rating <= 5000
+      && data.wins is number && data.wins >= 0 && data.wins <= 100000
+      && data.losses is number && data.losses >= 0 && data.losses <= 100000
+      && data.draws is number && data.draws >= 0 && data.draws <= 100000
+      && data.matchesPlayed is number && data.matchesPlayed == data.wins + data.losses + data.draws
+      && data.winStreak is number && data.winStreak >= 0 && data.winStreak <= 10000
+      && data.bestStreak is number && data.bestStreak >= data.winStreak && data.bestStreak <= 10000
+      && data.xp is number && data.xp >= 0 && data.xp <= 10000000
+      && data.achievements is list && data.achievements.size() <= 20
+      && (data.achievements.size() == 0 || (data.achievements[0] is string && data.achievements[0].size() <= 48))
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidPlayerPrivate(data, uid) {
+      return data.keys().hasAll(['uid', 'email', 'pushEnabled', 'darkMode', 'updatedAt'])
+      && data.keys().hasOnly(['uid', 'email', 'pushEnabled', 'darkMode', 'updatedAt'])
+      && data.uid == uid
+      && data.email is string && data.email.size() <= 160
+      && data.pushEnabled is bool
+      && data.darkMode is bool
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidMatchRecord(data, matchId) {
+      return data.keys().hasAll([
+        'matchId', 'lobbyName', 'gameMode', 'mapTheme', 'isRanked',
+        'playerIds', 'playerNames', 'scores', 'winnerId', 'recordedBy',
+        'durationSec', 'playedAt'
+      ])
+      && data.keys().hasOnly([
+        'matchId', 'lobbyName', 'gameMode', 'mapTheme', 'isRanked',
+        'playerIds', 'playerNames', 'scores', 'winnerId', 'recordedBy',
+        'durationSec', 'playedAt'
+      ])
+      && data.matchId == matchId
+      && data.lobbyName is string && data.lobbyName.size() >= 1 && data.lobbyName.size() <= 64
+      && data.gameMode == 'Ludo'
+      && data.mapTheme in ['Obsidian Grid', 'Alpine Bastion', 'Solaris Circuit']
+      && data.isRanked is bool
+      && data.playerIds is list && data.playerIds.size() >= 2 && data.playerIds.size() <= 6
+      && data.playerIds[0] is string && data.playerIds[0].size() >= 1 && data.playerIds[0].size() <= 128
+      && data.playerIds[1] is string && data.playerIds[1].size() >= 1 && data.playerIds[1].size() <= 128
+      && data.playerNames is list && data.playerNames.size() == data.playerIds.size()
+      && data.playerNames[0] is string && data.playerNames[0].size() >= 1 && data.playerNames[0].size() <= 32
+      && data.playerNames[1] is string && data.playerNames[1].size() >= 1 && data.playerNames[1].size() <= 32
+      && data.scores is list && data.scores.size() == data.playerIds.size()
+      && data.scores[0] is number && data.scores[0] >= 0 && data.scores[0] <= 10000
+      && data.scores[1] is number && data.scores[1] >= 0 && data.scores[1] <= 10000
+      && data.winnerId is string && data.winnerId.size() >= 1 && data.winnerId.size() <= 128
+      && (data.winnerId == 'draw' || data.winnerId in data.playerIds)
+      && data.recordedBy == request.auth.uid
+      && request.auth.uid in data.playerIds
+      && data.durationSec is number && data.durationSec >= 1 && data.durationSec <= 7200
+      && data.playedAt is timestamp;
+    }
+
+    function isValidFeedPost(data, postId) {
+      return data.keys().hasAll([
+        'postId', 'authorId', 'authorName', 'authorAvatar', 'caption',
+        'matchMode', 'mapTheme', 'outcome', 'scoreSummary', 'ratingDelta',
+        'visibility', 'likeCount', 'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'postId', 'authorId', 'authorName', 'authorAvatar', 'caption',
+        'matchMode', 'mapTheme', 'outcome', 'scoreSummary', 'ratingDelta',
+        'visibility', 'likeCount', 'createdAt', 'updatedAt'
+      ])
+      && data.postId == postId
+      && isValidId(data.authorId)
+      && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 32
+      && data.authorAvatar is string && data.authorAvatar.size() <= 512
+      && (data.authorAvatar == '' || data.authorAvatar.matches('^https://.*') || data.authorAvatar.matches('^emblem-.*'))
+      && data.caption is string && data.caption.size() >= 1 && data.caption.size() <= 280
+      && data.matchMode is string && data.matchMode.size() >= 1 && data.matchMode.size() <= 40
+      && data.mapTheme is string && data.mapTheme.size() >= 1 && data.mapTheme.size() <= 40
+      && data.outcome in ['Victory', 'Defeat', 'Draw', 'Highlight']
+      && data.scoreSummary is string && data.scoreSummary.size() >= 1 && data.scoreSummary.size() <= 48
+      && data.ratingDelta is number && data.ratingDelta >= -100 && data.ratingDelta <= 100
+      && data.visibility == 'public'
+      && data.likeCount is number && data.likeCount >= 0 && data.likeCount <= 1000000
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidFeedLike(data, uid) {
+      return data.keys().hasAll(['uid', 'createdAt'])
+      && data.keys().hasOnly(['uid', 'createdAt'])
+      && data.uid == uid
+      && data.createdAt is timestamp;
+    }
+
+    function isValidFriendship(data, pairId) {
+      return data.keys().hasAll(['pairId', 'users', 'userNames', 'requesterId', 'status', 'createdAt', 'updatedAt'])
+      && data.keys().hasOnly(['pairId', 'users', 'userNames', 'requesterId', 'status', 'createdAt', 'updatedAt'])
+      && data.pairId == pairId
+      && data.users is list && data.users.size() == 2
+      && isValidId(data.users[0]) && isValidId(data.users[1])
+      && data.users[0] != data.users[1]
+      && data.userNames is list && data.userNames.size() == 2
+      && data.userNames[0] is string && data.userNames[0].size() >= 1 && data.userNames[0].size() <= 32
+      && data.userNames[1] is string && data.userNames[1].size() >= 1 && data.userNames[1].size() <= 32
+      && data.requesterId in data.users
+      && data.status in ['pending', 'accepted']
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidDirectMessage(data, dmId) {
+      return data.keys().hasAll([
+        'dmId', 'participants', 'senderId', 'senderName',
+        'recipientId', 'recipientName', 'text', 'read', 'createdAt'
+      ])
+      && data.keys().hasOnly([
+        'dmId', 'participants', 'senderId', 'senderName',
+        'recipientId', 'recipientName', 'text', 'read', 'createdAt'
+      ])
+      && data.dmId == dmId
+      && data.participants is list && data.participants.size() == 2
+      && isValidId(data.participants[0]) && isValidId(data.participants[1])
+      && data.senderId in data.participants
+      && data.recipientId in data.participants
+      && data.senderId != data.recipientId
+      && data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 32
+      && data.recipientName is string && data.recipientName.size() >= 1 && data.recipientName.size() <= 32
+      && data.text is string && data.text.size() >= 1 && data.text.size() <= 500
+      && data.read is bool
+      && data.createdAt is timestamp;
+    }
+
+    function isValidNotification(data, notifId) {
+      return data.keys().hasAll([
+        'notifId', 'recipientId', 'senderId', 'senderName',
+        'type', 'title', 'body', 'lobbyId', 'read', 'createdAt'
+      ])
+      && data.keys().hasOnly([
+        'notifId', 'recipientId', 'senderId', 'senderName',
+        'type', 'title', 'body', 'lobbyId', 'read', 'createdAt'
+      ])
+      && data.notifId == notifId
+      && isValidId(data.recipientId)
+      && isValidId(data.senderId)
+      && data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 32
+      && data.type in ['match_invite', 'direct_message', 'friend_request', 'match_result']
+      && data.title is string && data.title.size() >= 1 && data.title.size() <= 80
+      && data.body is string && data.body.size() >= 1 && data.body.size() <= 200
+      && data.lobbyId is string && data.lobbyId.size() <= 64
+      && data.read is bool
+      && data.createdAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    // Public Player Profiles & Leaderboard (Zero PII)
+    match /players/{uid} {
+      allow get: if isValidId(uid);
+      allow list: if resource.data.rating >= 100;
+
+      allow create: if isVerifiedUser()
+        && isValidId(uid)
+        && isOwner(uid)
+        && isValidPlayerProfile(incoming(), uid)
+        && incoming().rating == 1200
+        && incoming().wins == 0
+        && incoming().losses == 0
+        && incoming().draws == 0
+        && incoming().matchesPlayed == 0
+        && incoming().winStreak == 0
+        && incoming().bestStreak == 0
+        && incoming().xp == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(uid)
+        && isOwner(uid)
+        && isValidPlayerProfile(incoming(), uid)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Profile Customization Update
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['username', 'bio', 'region', 'preferredPlatform', 'avatarCode', 'photoUrl', 'updatedAt'])
+          )
+          ||
+          // Action 2: Post-Match Stat Progression (bounded to +1 match at a time)
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'rating', 'wins', 'losses', 'draws', 'matchesPlayed',
+              'winStreak', 'bestStreak', 'xp', 'achievements', 'updatedAt'
+            ])
+            && incoming().matchesPlayed == existing().matchesPlayed + 1
+            && incoming().rating >= existing().rating - 60
+            && incoming().rating <= existing().rating + 60
+            && incoming().xp >= existing().xp
+            && incoming().xp <= existing().xp + 500
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // Private PII & User Preferences
+    match /playerPrivate/{uid} {
+      allow get: if isValidId(uid) && isOwner(uid);
+      allow list: if false;
+
+      allow create: if isVerifiedUser()
+        && isValidId(uid)
+        && isOwner(uid)
+        && isValidPlayerPrivate(incoming(), uid)
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(uid)
+        && isOwner(uid)
+        && isValidPlayerPrivate(incoming(), uid)
+        && incoming().uid == existing().uid
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'pushEnabled', 'darkMode', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    // Immutable Match History
+    match /matches/{matchId} {
+      allow get: if isValidId(matchId) && isSignedIn() && request.auth.uid in resource.data.playerIds;
+      allow list: if isSignedIn() && request.auth.uid in resource.data.playerIds;
+
+      allow create: if isVerifiedUser()
+        && isValidId(matchId)
+        && isValidMatchRecord(incoming(), matchId)
+        && incoming().playedAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    // Community Social Feed
+    match /feedPosts/{postId} {
+      allow get: if isValidId(postId) && resource.data.visibility == 'public';
+      allow list: if resource.data.visibility == 'public';
+
+      allow create: if isVerifiedUser()
+        && isValidId(postId)
+        && isValidFeedPost(incoming(), postId)
+        && incoming().authorId == request.auth.uid
+        && incoming().likeCount == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(postId)
+        && isValidFeedPost(incoming(), postId)
+        && incoming().postId == existing().postId
+        && incoming().authorId == existing().authorId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Author edits caption
+          (
+            existing().authorId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['caption', 'updatedAt'])
+          )
+          ||
+          // Action 2: Atomic Like (+1 synced with /likes/{uid})
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['likeCount', 'updatedAt'])
+            && incoming().likeCount == existing().likeCount + 1
+            && existsAfter(/databases/$(database)/documents/feedPosts/$(postId)/likes/$(request.auth.uid))
+          )
+          ||
+          // Action 3: Atomic Unlike (-1 synced with /likes/{uid})
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['likeCount', 'updatedAt'])
+            && incoming().likeCount == existing().likeCount - 1
+            && !existsAfter(/databases/$(database)/documents/feedPosts/$(postId)/likes/$(request.auth.uid))
+          )
+        );
+
+      allow delete: if isVerifiedUser()
+        && isValidId(postId)
+        && existing().authorId == request.auth.uid;
+
+      // Subcollection for Likes (Master Gate + Atomicity Guarantee)
+      match /likes/{uid} {
+        allow get: if isValidId(postId) && isValidId(uid) && isSignedIn();
+        allow list: if isSignedIn() && resource.data.uid == request.auth.uid;
+
+        allow create: if isVerifiedUser()
+          && isValidId(postId)
+          && isValidId(uid)
+          && isOwner(uid)
+          && isValidFeedLike(incoming(), uid)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/feedPosts/$(postId))
+          && getAfter(/databases/$(database)/documents/feedPosts/$(postId)).data.likeCount == get(/databases/$(database)/documents/feedPosts/$(postId)).data.likeCount + 1;
+
+        allow update: if false;
+
+        allow delete: if isVerifiedUser()
+          && isValidId(postId)
+          && isValidId(uid)
+          && isOwner(uid)
+          && exists(/databases/$(database)/documents/feedPosts/$(postId))
+          && getAfter(/databases/$(database)/documents/feedPosts/$(postId)).data.likeCount == get(/databases/$(database)/documents/feedPosts/$(postId)).data.likeCount - 1;
+      }
+    }
+
+    // Friendships
+    match /friendships/{pairId} {
+      allow get: if isValidLongId(pairId) && isSignedIn() && request.auth.uid in resource.data.users;
+      allow list: if isSignedIn() && request.auth.uid in resource.data.users;
+
+      allow create: if isVerifiedUser()
+        && isValidLongId(pairId)
+        && isValidFriendship(incoming(), pairId)
+        && incoming().requesterId == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidLongId(pairId)
+        && isValidFriendship(incoming(), pairId)
+        && request.auth.uid in existing().users
+        && incoming().pairId == existing().pairId
+        && incoming().users == existing().users
+        && incoming().requesterId == existing().requesterId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && existing().status == 'pending'
+        && incoming().status == 'accepted'
+        && request.auth.uid != existing().requesterId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+
+      allow delete: if isVerifiedUser()
+        && isValidLongId(pairId)
+        && request.auth.uid in existing().users;
+    }
+
+    // Direct Messages
+    match /directMessages/{dmId} {
+      allow get: if isValidId(dmId) && isSignedIn() && request.auth.uid in resource.data.participants;
+      allow list: if isSignedIn() && request.auth.uid in resource.data.participants;
+
+      allow create: if isVerifiedUser()
+        && isValidId(dmId)
+        && isValidDirectMessage(incoming(), dmId)
+        && incoming().senderId == request.auth.uid
+        && incoming().read == false
+        && incoming().createdAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(dmId)
+        && isValidDirectMessage(incoming(), dmId)
+        && existing().recipientId == request.auth.uid
+        && incoming().read == true
+        && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+
+      allow delete: if false;
+    }
+
+    // Persistent Push Notifications & Match Invites
+    match /notifications/{notifId} {
+      allow get: if isValidId(notifId) && isSignedIn() && resource.data.recipientId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.recipientId == request.auth.uid;
+
+      allow create: if isVerifiedUser()
+        && isValidId(notifId)
+        && isValidNotification(incoming(), notifId)
+        && incoming().senderId == request.auth.uid
+        && incoming().read == false
+        && incoming().createdAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(notifId)
+        && isValidNotification(incoming(), notifId)
+        && existing().recipientId == request.auth.uid
+        && incoming().read == true
+        && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+
+      allow delete: if isVerifiedUser()
+        && isValidId(notifId)
+        && existing().recipientId == request.auth.uid;
+    }
+  }
+}

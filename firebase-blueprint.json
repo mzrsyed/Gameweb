@@ -1,0 +1,247 @@
+{
+  "entities": {
+    "PlayerProfile": {
+      "title": "PlayerProfile",
+      "description": "Public competitive player profile, stats, and achievements (no PII).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "username": { "type": "string", "minLength": 2, "maxLength": 24 },
+        "bio": { "type": "string", "maxLength": 160 },
+        "region": { "type": "string", "enum": ["NA-East", "NA-West", "EU-West", "APAC", "Global"] },
+        "preferredPlatform": { "type": "string", "enum": ["Desktop", "Mobile", "Cross-Play"] },
+        "avatarCode": { "type": "string", "enum": ["google", "emblem-cobalt", "emblem-amber", "emblem-emerald", "emblem-slate"] },
+        "photoUrl": { "type": "string", "maxLength": 512 },
+        "rating": { "type": "number" },
+        "wins": { "type": "number" },
+        "losses": { "type": "number" },
+        "draws": { "type": "number" },
+        "matchesPlayed": { "type": "number" },
+        "winStreak": { "type": "number" },
+        "bestStreak": { "type": "number" },
+        "xp": { "type": "number" },
+        "achievements": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid",
+        "username",
+        "bio",
+        "region",
+        "preferredPlatform",
+        "avatarCode",
+        "photoUrl",
+        "rating",
+        "wins",
+        "losses",
+        "draws",
+        "matchesPlayed",
+        "winStreak",
+        "bestStreak",
+        "xp",
+        "achievements",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PlayerPrivateSettings": {
+      "title": "PlayerPrivateSettings",
+      "description": "Private player PII and notification/theme preferences.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 160 },
+        "pushEnabled": { "type": "boolean" },
+        "darkMode": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "pushEnabled", "darkMode", "updatedAt"]
+    },
+    "MatchRecord": {
+      "title": "MatchRecord",
+      "description": "Immutable completed 2-to-6 player Ludo match record.",
+      "type": "object",
+      "properties": {
+        "matchId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "lobbyName": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "gameMode": { "type": "string", "enum": ["Ludo"] },
+        "mapTheme": { "type": "string", "enum": ["Obsidian Grid", "Alpine Bastion", "Solaris Circuit"] },
+        "isRanked": { "type": "boolean" },
+        "playerIds": { "type": "array" },
+        "playerNames": { "type": "array" },
+        "scores": { "type": "array" },
+        "winnerId": { "type": "string", "maxLength": 128 },
+        "recordedBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "durationSec": { "type": "number" },
+        "playedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "matchId",
+        "lobbyName",
+        "gameMode",
+        "mapTheme",
+        "isRanked",
+        "playerIds",
+        "playerNames",
+        "scores",
+        "winnerId",
+        "recordedBy",
+        "durationSec",
+        "playedAt"
+      ]
+    },
+    "FeedPost": {
+      "title": "FeedPost",
+      "description": "Social feed entry sharing a match result or achievement.",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorName": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "authorAvatar": { "type": "string", "maxLength": 512 },
+        "caption": { "type": "string", "minLength": 1, "maxLength": 280 },
+        "matchMode": { "type": "string", "maxLength": 40 },
+        "mapTheme": { "type": "string", "maxLength": 40 },
+        "outcome": { "type": "string", "enum": ["Victory", "Defeat", "Draw", "Highlight"] },
+        "scoreSummary": { "type": "string", "maxLength": 48 },
+        "ratingDelta": { "type": "number" },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "likeCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "postId",
+        "authorId",
+        "authorName",
+        "authorAvatar",
+        "caption",
+        "matchMode",
+        "mapTheme",
+        "outcome",
+        "scoreSummary",
+        "ratingDelta",
+        "visibility",
+        "likeCount",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FeedLike": {
+      "title": "FeedLike",
+      "description": "Atomic like marker for a feed post.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "Friendship": {
+      "title": "Friendship",
+      "description": "Bidirectional friend connection between two players.",
+      "type": "object",
+      "properties": {
+        "pairId": { "type": "string", "maxLength": 260, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "users": { "type": "array" },
+        "userNames": { "type": "array" },
+        "requesterId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "status": { "type": "string", "enum": ["pending", "accepted"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["pairId", "users", "userNames", "requesterId", "status", "createdAt", "updatedAt"]
+    },
+    "DirectMessage": {
+      "title": "DirectMessage",
+      "description": "Private message between two registered players.",
+      "type": "object",
+      "properties": {
+        "dmId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "participants": { "type": "array" },
+        "senderId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "recipientId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "recipientName": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "dmId",
+        "participants",
+        "senderId",
+        "senderName",
+        "recipientId",
+        "recipientName",
+        "text",
+        "read",
+        "createdAt"
+      ]
+    },
+    "PlayerNotification": {
+      "title": "PlayerNotification",
+      "description": "Persistent notification or match invitation for a recipient player.",
+      "type": "object",
+      "properties": {
+        "notifId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "recipientId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "type": { "type": "string", "enum": ["match_invite", "direct_message", "friend_request", "match_result"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "body": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "lobbyId": { "type": "string", "maxLength": 64 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "notifId",
+        "recipientId",
+        "senderId",
+        "senderName",
+        "type",
+        "title",
+        "body",
+        "lobbyId",
+        "read",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/players/{uid}": {
+      "schema": { "$ref": "#/entities/PlayerProfile" },
+      "description": "Public competitive player profiles and leaderboard stats."
+    },
+    "/playerPrivate/{uid}": {
+      "schema": { "$ref": "#/entities/PlayerPrivateSettings" },
+      "description": "Owner-only private PII (email) and app preferences."
+    },
+    "/matches/{matchId}": {
+      "schema": { "$ref": "#/entities/MatchRecord" },
+      "description": "Completed match history scoped to participating players."
+    },
+    "/feedPosts/{postId}": {
+      "schema": { "$ref": "#/entities/FeedPost" },
+      "description": "Public social feed posts sharing match results."
+    },
+    "/feedPosts/{postId}/likes/{uid}": {
+      "schema": { "$ref": "#/entities/FeedLike" },
+      "description": "Per-user atomic like documents for feed posts."
+    },
+    "/friendships/{pairId}": {
+      "schema": { "$ref": "#/entities/Friendship" },
+      "description": "Friend connections between two players."
+    },
+    "/directMessages/{dmId}": {
+      "schema": { "$ref": "#/entities/DirectMessage" },
+      "description": "Private messages scoped to sender and recipient."
+    },
+    "/notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/PlayerNotification" },
+      "description": "Push notification and match invite records scoped to recipient."
+    }
+  }
+}

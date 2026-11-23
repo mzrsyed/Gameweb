@@ -1,0 +1,6 @@
+{
+  "name": "Gridline",
+  "description": "Cross-platform multiplayer game lobbies, real-time WebSocket matchmaking, live chat, leaderboards, and player analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
