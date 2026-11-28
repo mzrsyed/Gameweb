@@ -87,12 +87,12 @@ export function LeaderboardView({ players, currentUid }: LeaderboardViewProps) {
                         </span>
                       </td>
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 max-w-[140px] sm:max-w-none">
                           <AvatarBadge avatar={avatar} name={p.username} size="sm" />
                           <p className="font-semibold text-slate-900 dark:text-white truncate">
                             {p.username}
                             {isMe && (
-                              <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+                              <span className="ml-1.5 text-xs font-normal text-amber-600 dark:text-amber-400">
                                 (You)
                               </span>
                             )}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Award, Bell, Check, Crown, Moon, Sun } from 'lucide-react';
+import { Award, Bell, Check, Crown, Moon, Sun, Volume2, VolumeX } from 'lucide-react';
 import {
   ACHIEVEMENTS_CATALOG,
   type AvatarCode,
@@ -19,8 +19,10 @@ interface DashboardViewProps {
   guestName: string;
   onUpdateGuestName: (name: string) => void;
   darkMode: boolean;
+  soundOn: boolean;
   pushEnabled: boolean;
   onToggleDarkMode: () => void;
+  onToggleSound: () => void;
   onTogglePushNotifications: () => void;
   onRequestSignIn: () => void;
   onSignOut: () => void;
@@ -42,8 +44,10 @@ export function DashboardView({
   guestName,
   onUpdateGuestName,
   darkMode,
+  soundOn,
   pushEnabled,
   onToggleDarkMode,
+  onToggleSound,
   onTogglePushNotifications,
   onRequestSignIn,
   onSignOut,
@@ -119,19 +123,35 @@ export function DashboardView({
             </div>
           </form>
 
-          <button
-            type="button"
-            onClick={onToggleDarkMode}
-            className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-[#1B2E54] flex items-center justify-between text-sm text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#132245] cursor-pointer"
-          >
-            <span className="inline-flex items-center gap-2">
-              {darkMode ? <Moon className="w-4 h-4 text-amber-400" /> : <Sun className="w-4 h-4 text-amber-500" />}
-              <span>Display Theme</span>
-            </span>
-            <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-              {darkMode ? 'Royal Dark' : 'Daylight'}
-            </span>
-          </button>
+          <div className="space-y-2.5">
+            <button
+              type="button"
+              onClick={onToggleDarkMode}
+              className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-[#1B2E54] flex items-center justify-between text-sm text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#132245] min-h-[44px] cursor-pointer"
+            >
+              <span className="inline-flex items-center gap-2">
+                {darkMode ? <Moon className="w-4 h-4 text-amber-400" /> : <Sun className="w-4 h-4 text-amber-500" />}
+                <span>Display Theme</span>
+              </span>
+              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                {darkMode ? 'Royal Dark' : 'Daylight'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onToggleSound}
+              className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-[#1B2E54] flex items-center justify-between text-sm text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#132245] min-h-[44px] cursor-pointer"
+            >
+              <span className="inline-flex items-center gap-2">
+                {soundOn ? <Volume2 className="w-4 h-4 text-amber-500" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
+                <span>Sound Effects</span>
+              </span>
+              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                {soundOn ? 'On' : 'Muted'}
+              </span>
+            </button>
+          </div>
 
           <div className="pt-4 border-t border-slate-200 dark:border-[#1B2E54] space-y-3">
             <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -369,7 +389,7 @@ export function DashboardView({
                             {m.isRanked ? 'Ranked' : 'Casual'}
                           </p>
                         </td>
-                        <td className="py-3 px-3 text-xs text-slate-600 dark:text-slate-300 max-w-[200px] truncate">
+                        <td className="py-3 px-3 text-xs text-slate-600 dark:text-slate-300 max-w-[115px] sm:max-w-[200px] truncate">
                           {m.playerNames.join(', ')}
                         </td>
                         <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-800 dark:text-slate-200">
@@ -461,7 +481,7 @@ export function DashboardView({
             <button
               type="button"
               onClick={onToggleDarkMode}
-              className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-[#1B2E54] flex items-center justify-between text-sm text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#132245] cursor-pointer"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-[#1B2E54] flex items-center justify-between text-sm text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#132245] min-h-[44px] cursor-pointer"
             >
               <span className="inline-flex items-center gap-2">
                 {darkMode ? <Moon className="w-4 h-4 text-amber-400" /> : <Sun className="w-4 h-4 text-amber-500" />}
@@ -474,8 +494,22 @@ export function DashboardView({
 
             <button
               type="button"
+              onClick={onToggleSound}
+              className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-[#1B2E54] flex items-center justify-between text-sm text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#132245] min-h-[44px] cursor-pointer"
+            >
+              <span className="inline-flex items-center gap-2">
+                {soundOn ? <Volume2 className="w-4 h-4 text-amber-500" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
+                <span>Sound Effects</span>
+              </span>
+              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                {soundOn ? 'On' : 'Muted'}
+              </span>
+            </button>
+
+            <button
+              type="button"
               onClick={onTogglePushNotifications}
-              className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-[#1B2E54] flex items-center justify-between text-sm text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#132245] cursor-pointer"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-[#1B2E54] flex items-center justify-between text-sm text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#132245] min-h-[44px] cursor-pointer"
             >
               <span className="inline-flex items-center gap-2">
                 <Bell className="w-4 h-4 text-slate-500" />

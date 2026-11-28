@@ -22,13 +22,13 @@ export function TopNav({
   return (
     <>
       <header className="sticky top-0 z-30 border-b border-slate-200 dark:border-[#1B2E54] bg-white/95 dark:bg-[#071126]/95 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-8">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-13 sm:h-16 flex items-center justify-between gap-3 md:gap-8">
           <button
             type="button"
             onClick={() => onNavigate('lobbies')}
-            className="inline-flex items-center gap-2.5 font-display text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-500 cursor-pointer"
+            className="inline-flex items-center gap-2 sm:gap-2.5 font-display text-base sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white whitespace-nowrap shrink-0 touch-manipulation focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-500 cursor-pointer"
           >
-            <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center shadow-sm">
+            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center shadow-sm">
               <Crown className="w-4 h-4 fill-slate-950/20" />
             </span>
             <span>
@@ -69,7 +69,7 @@ export function TopNav({
             <button
               type="button"
               onClick={onPrimaryAction}
-              className="px-4 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-sm transition-all whitespace-nowrap shrink-0 min-h-[40px] cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
+              className="px-3.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-sm transition-all whitespace-nowrap shrink-0 min-h-[38px] sm:min-h-[40px] touch-manipulation cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
             >
               New Room
             </button>
@@ -80,9 +80,9 @@ export function TopNav({
       {/* Mobile Bottom Navigation */}
       <nav
         aria-label="Mobile navigation"
-        className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-200 dark:border-[#1B2E54] bg-white/95 dark:bg-[#071126]/95 backdrop-blur-sm"
+        className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-200 dark:border-[#1B2E54] bg-white/95 dark:bg-[#071126]/95 backdrop-blur-sm pb-[env(safe-area-inset-bottom)]"
       >
-        <div className="grid grid-cols-3 h-14">
+        <div className="grid grid-cols-3 h-13">
           {NAV_ITEMS.map((item) => {
             const active = activeSection === item.id;
             return (
@@ -90,7 +90,7 @@ export function TopNav({
                 key={item.id}
                 type="button"
                 onClick={() => onNavigate(item.id)}
-                className={`flex items-center justify-center text-xs font-medium min-h-[44px] px-1 whitespace-nowrap truncate transition-colors ${
+                className={`flex items-center justify-center text-xs font-medium min-h-[44px] px-1 whitespace-nowrap truncate touch-manipulation transition-colors ${
                   active
                     ? 'text-amber-600 dark:text-amber-400 font-semibold border-t-2 border-amber-500 dark:border-amber-400'
                     : 'text-slate-600 dark:text-slate-400'

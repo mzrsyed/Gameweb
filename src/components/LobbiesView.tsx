@@ -430,7 +430,7 @@ export function LobbiesView({
 
           {/* Right: Live Room Chat (Online Tables Only) */}
           {showSideChat && (
-            <div className="lg:col-span-4 rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] flex flex-col h-[500px]">
+            <div className="lg:col-span-4 rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] flex flex-col h-[340px] lg:h-[540px]">
               <div className="px-4 py-3 border-b border-slate-200 dark:border-[#1B2E54] flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
                   <MessageSquare className="w-4 h-4 text-amber-500" />
@@ -511,8 +511,8 @@ export function LobbiesView({
 
         {/* Invite Modal */}
         {showInviteModal && (
-          <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="max-w-md w-full rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-5 space-y-4">
+          <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+            <div className="max-w-md w-full max-h-[90dvh] overflow-y-auto my-auto rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
                   Invite Online Players
@@ -582,14 +582,14 @@ export function LobbiesView({
   return (
     <div className="space-y-8">
       {/* Ludo King Royal Blue Arena Launch Hub */}
-      <section className="rounded-2xl border-2 border-amber-400/70 bg-gradient-to-br from-[#0E48AC] via-[#0B3A8C] to-[#072459] p-6 sm:p-8 text-white shadow-xl space-y-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <section className="rounded-2xl border-2 border-amber-400/70 bg-gradient-to-br from-[#0E48AC] via-[#0B3A8C] to-[#072459] p-4 sm:p-8 text-white shadow-xl space-y-5 sm:space-y-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 sm:gap-6">
           <div className="space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-2 text-xs font-bold text-amber-300 uppercase tracking-wider">
               <Crown className="w-4 h-4" />
               <span>Ausa Ludo Master</span>
             </div>
-            <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight">
+            <h1 className="font-display text-2xl sm:text-4xl font-bold tracking-tight [text-wrap:balance]">
               Classic Ludo for 2 to 6 Players — Play Instantly
             </h1>
             <p className="text-sm sm:text-base text-blue-100/90">
@@ -602,13 +602,13 @@ export function LobbiesView({
             <p className="text-xs font-bold text-amber-300 uppercase tracking-wider">
               Select Players (2–6)
             </p>
-            <div className="flex items-center gap-1.5">
+            <div className="grid grid-cols-5 gap-1.5 sm:flex sm:items-center">
               {([2, 3, 4, 5, 6] as const).map((count) => (
                 <button
                   key={count}
                   type="button"
                   onClick={() => setQuickSeats(count)}
-                  className={`w-11 h-10 rounded-lg font-bold text-sm transition-all cursor-pointer ${
+                  className={`min-h-[44px] sm:w-11 rounded-lg font-bold text-sm touch-manipulation transition-all cursor-pointer ${
                     quickSeats === count
                       ? 'bg-amber-400 text-slate-950 shadow-md scale-105'
                       : 'bg-white/10 text-blue-100 hover:bg-white/20'
@@ -855,7 +855,7 @@ export function LobbiesView({
 
       {/* Private Room Code Modal */}
       {privateJoinTarget && (
-        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-start sm:items-center justify-center p-4 overflow-y-auto">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -863,7 +863,7 @@ export function LobbiesView({
               setPrivateJoinTarget(null);
               setJoinCode('');
             }}
-            className="max-w-sm w-full rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-6 space-y-4"
+            className="max-w-sm w-full max-h-[90dvh] overflow-y-auto my-auto rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-6 space-y-4"
           >
             <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
               Enter Room Access Code
@@ -877,19 +877,19 @@ export function LobbiesView({
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value)}
               placeholder="Access code..."
-              className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-300 dark:border-[#243A68] bg-slate-50 dark:bg-[#071126] text-slate-900 dark:text-white min-h-[42px]"
+              className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-300 dark:border-[#243A68] bg-slate-50 dark:bg-[#071126] text-slate-900 dark:text-white min-h-[44px]"
             />
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setPrivateJoinTarget(null)}
-                className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 cursor-pointer"
+                className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 min-h-[44px] cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-sm font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer"
+                className="px-4 py-2 text-sm font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 min-h-[44px] cursor-pointer"
               >
                 Join Room
               </button>
@@ -900,10 +900,10 @@ export function LobbiesView({
 
       {/* Streamlined Create Online Room Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-start sm:items-center justify-center p-4 overflow-y-auto">
           <form
             onSubmit={handleCreateSubmit}
-            className="max-w-md w-full rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-6 space-y-5 my-8"
+            className="max-w-md w-full max-h-[90dvh] overflow-y-auto my-auto rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-5 sm:p-6 space-y-5"
           >
             <div className="flex items-center justify-between">
               <h2 className="font-display text-xl font-bold text-slate-900 dark:text-white">

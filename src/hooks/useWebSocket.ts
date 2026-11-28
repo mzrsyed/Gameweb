@@ -18,6 +18,18 @@ interface UseWebSocketOptions {
   onPushEvent?: (evt: RealtimePushEvent) => void;
 }
 
+function getTabGuestId(): string {
+  try {
+    const existing = window.sessionStorage.getItem('ausa_tab_guest_id');
+    if (existing && /^guest-[a-z0-9]{4,24}$/i.test(existing)) return existing;
+    const generated = `guest-${Math.random().toString(36).slice(2, 10)}`;
+    window.sessionStorage.setItem('ausa_tab_guest_id', generated);
+    return generated;
+  } catch {
+    return `guest-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
 export function useWebSocket({
   user,
   profile,
@@ -33,6 +45,7 @@ export function useWebSocket({
   const userRef = useRef(user);
   const profileRef = useRef(profile);
   const guestNameRef = useRef(guestName);
+  const tabGuestIdRef = useRef<string>(getTabGuestId());
 
   onPushRef.current = onPushEvent;
   pushEnabledRef.current = pushEnabled;
@@ -65,7 +78,10 @@ export function useWebSocket({
         ws.send(
           JSON.stringify({
             type: 'auth:guest',
-            payload: { username: guestNameRef.current.trim() },
+            payload: {
+              guestId: tabGuestIdRef.current,
+              username: guestNameRef.current.trim(),
+            },
           })
         );
       }

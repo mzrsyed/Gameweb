@@ -115,18 +115,30 @@ export function LudoDice3D({
   const [spinCount, setSpinCount] = useState(0);
   const [isRollingAnim, setIsRollingAnim] = useState(false);
   const prevNonceRef = useRef(actionNonce);
+  const rollTimerRef = useRef<number | null>(null);
+  const clickedWaitingServerRef = useRef(false);
 
   useEffect(() => {
     if (actionNonce !== prevNonceRef.current) {
       prevNonceRef.current = actionNonce;
       if (value !== null) {
-        setSpinCount((c) => c + 1);
+        if (clickedWaitingServerRef.current) {
+          clickedWaitingServerRef.current = false;
+        } else {
+          setSpinCount((c) => c + 1);
+        }
         setIsRollingAnim(true);
-        const timer = window.setTimeout(() => setIsRollingAnim(false), 480);
-        return () => window.clearTimeout(timer);
+        if (rollTimerRef.current) window.clearTimeout(rollTimerRef.current);
+        rollTimerRef.current = window.setTimeout(() => setIsRollingAnim(false), 480);
       }
     }
   }, [actionNonce, value]);
+
+  useEffect(() => {
+    return () => {
+      if (rollTimerRef.current) window.clearTimeout(rollTimerRef.current);
+    };
+  }, []);
 
   const activeFace = value ?? 1;
   const baseTarget = TARGET_FACE_ROTATION[activeFace] ?? TARGET_FACE_ROTATION[1];
@@ -137,9 +149,15 @@ export function LudoDice3D({
   const depth = small ? 18 : 22;
 
   const handleClick = () => {
-    if (!canRoll || inactive) return;
+    if (!canRoll || inactive || clickedWaitingServerRef.current) return;
+    clickedWaitingServerRef.current = true;
     setSpinCount((c) => c + 1);
     setIsRollingAnim(true);
+    if (rollTimerRef.current) window.clearTimeout(rollTimerRef.current);
+    rollTimerRef.current = window.setTimeout(() => {
+      clickedWaitingServerRef.current = false;
+      setIsRollingAnim(false);
+    }, 650);
     onRoll();
   };
 
@@ -161,8 +179,8 @@ export function LudoDice3D({
             ? `Dice showing ${value}`
             : 'Waiting for turn'
       }
-      className={`group relative rounded-xl border-2 flex items-center justify-center shrink-0 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
-        small ? 'w-[50px] h-[50px]' : 'w-[60px] h-[60px]'
+      className={`group relative rounded-xl border-2 flex items-center justify-center shrink-0 touch-manipulation transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+        small ? 'w-[46px] h-[46px] sm:w-[50px] sm:h-[50px]' : 'w-[58px] h-[58px]'
       } ${trayStyle} ${
         inactive
           ? 'opacity-80 cursor-default'

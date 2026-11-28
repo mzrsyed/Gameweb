@@ -696,7 +696,7 @@ export function GameBoard({
     const avatarBox = (
       <div className="flex flex-col items-center gap-1 shrink-0">
         <div
-          className={`relative w-[50px] h-[50px] rounded-lg border-2 flex items-center justify-center overflow-hidden bg-slate-100 ${
+          className={`relative w-[42px] h-[42px] sm:w-[50px] sm:h-[50px] rounded-lg border-2 flex items-center justify-center overflow-hidden bg-slate-100 ${
             isActiveTurn
               ? 'border-lime-400 ring-2 ring-lime-400/80 shadow-[0_0_12px_rgba(163,230,53,0.65)]'
               : 'border-amber-300/85'
@@ -711,16 +711,16 @@ export function GameBoard({
             />
           ) : player.isCpu ? (
             <div className="w-full h-full bg-slate-800 text-amber-300 flex items-center justify-center">
-              <Bot className="w-6 h-6" />
+              <Bot className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
           ) : (
             <div className="w-full h-full bg-gradient-to-b from-slate-100 to-slate-300 text-slate-500 flex items-center justify-center">
-              <User className="w-6 h-6" />
+              <User className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
           )}
           <span
             aria-hidden="true"
-            className={`absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full border border-white ${cStyle.dot}`}
+            className={`absolute bottom-0.5 right-0.5 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border border-white ${cStyle.dot}`}
           />
         </div>
       </div>
@@ -729,7 +729,7 @@ export function GameBoard({
     return (
       <div
         key={player.uid}
-        className={`relative rounded-xl border-2 px-2.5 py-2 transition-all duration-200 ${
+        className={`relative rounded-xl border-2 px-2 py-1.5 sm:px-2.5 sm:py-2 transition-all duration-200 ${
           isActiveTurn
             ? 'bg-gradient-to-b from-[#115CE0] to-[#0A3A96] border-amber-300 shadow-[0_0_20px_rgba(251,191,36,0.4)]'
             : 'bg-gradient-to-b from-[#0C4AB8] to-[#072E78] border-amber-400/75 opacity-95'
@@ -985,7 +985,7 @@ export function GameBoard({
       style={{ perspective: '1250px' }}
     >
       <div
-        className="relative aspect-square w-full max-w-[500px] rounded-xl border-2 border-amber-400/90 bg-gradient-to-b from-[#0C2F75] to-[#081F52] p-1.5 sm:p-2 preserve-3d"
+        className="relative aspect-square w-full max-w-[min(100%,460px)] md:max-w-[min(100%,500px,62dvh)] rounded-xl border-2 border-amber-400/90 bg-gradient-to-b from-[#0C2F75] to-[#081F52] p-1 sm:p-2 preserve-3d"
         style={{
           transform: `rotateX(${tiltDeg}deg)`,
           transition: 'transform 420ms cubic-bezier(0.16, 1, 0.3, 1)',
@@ -1237,8 +1237,16 @@ export function GameBoard({
               (g) => g.slot === t.slot && g.tokenIdx === t.tokenIdx
             );
             const isStacked = group.length > 1;
-            const offsetX = isStacked ? ((stackPos % 2) - 0.5) * 1.45 : 0;
-            const offsetY = isStacked ? (Math.floor(stackPos / 2) - 0.5) * 1.45 : 0;
+            const offsetX = !isStacked
+              ? 0
+              : group.length <= 4
+                ? ((stackPos % 2) - 0.5) * 1.45
+                : Math.cos((stackPos / group.length) * Math.PI * 2) * 1.45;
+            const offsetY = !isStacked
+              ? 0
+              : group.length <= 4
+                ? (Math.floor(stackPos / 2) - 0.5) * 1.45
+                : Math.sin((stackPos / group.length) * Math.PI * 2) * 1.45;
             const cStyle = COLOR_STYLES[t.color];
             const leftPct = t.leftPct + offsetX;
             const topPct = t.topPct + offsetY;
@@ -1287,8 +1295,10 @@ export function GameBoard({
                     transition:
                       'transform 220ms cubic-bezier(0.16, 1, 0.3, 1), left 240ms ease, top 240ms ease',
                   }}
-                  className={`pointer-events-auto absolute flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 rounded-full ${
-                    t.movable ? 'z-30 cursor-pointer' : 'z-20 cursor-default'
+                  className={`pointer-events-auto absolute flex items-center justify-center touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 rounded-full ${
+                    t.movable
+                      ? "z-30 cursor-pointer after:content-[''] after:absolute after:-inset-2.5 after:rounded-full"
+                      : 'z-20 cursor-default'
                   }`}
                 >
                   <PawnPiecePin
@@ -1310,7 +1320,7 @@ export function GameBoard({
   return (
     <div
       style={arenaPatternStyle}
-      className="rounded-2xl border-2 border-amber-400/70 p-3 sm:p-4 space-y-3 shadow-2xl text-white"
+      className="rounded-2xl border-2 border-amber-400/70 p-2.5 sm:p-4 space-y-2.5 sm:space-y-3 shadow-2xl text-white"
     >
       {/* Compact Arena Bar */}
       <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-white/15">
@@ -1464,7 +1474,7 @@ export function GameBoard({
       )}
 
       {/* Action & Status Strip */}
-      <div className="rounded-xl border border-amber-400/50 bg-[#082B70]/90 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-3">
+      <div className="rounded-xl border border-amber-400/50 bg-[#082B70]/90 px-3 sm:px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
         <div className="min-w-0">
           <p className="text-xs sm:text-sm font-bold text-white truncate">
             {gameState.lastActionText}
@@ -1478,7 +1488,7 @@ export function GameBoard({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {canControlActiveTurn && gameState.phase === 'roll' && (
             <button
               type="button"
@@ -1486,7 +1496,7 @@ export function GameBoard({
                 soundFx.capture();
                 onRollDice();
               }}
-              className="px-4 py-2 text-xs sm:text-sm font-bold rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 transition-all min-h-[42px] inline-flex items-center gap-2 cursor-pointer shadow-md"
+              className="w-full sm:w-auto px-5 py-2.5 text-xs sm:text-sm font-bold rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 transition-all min-h-[44px] inline-flex items-center justify-center gap-2 touch-manipulation cursor-pointer shadow-md"
             >
               <Dices className="w-4 h-4" />
               Roll Dice
@@ -1494,7 +1504,7 @@ export function GameBoard({
           )}
 
           {canControlActiveTurn && gameState.phase === 'move' && activePlayer && (
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
               {gameState.movableTokenIndices.map((idx) => {
                 const cStyle = COLOR_STYLES[activePlayer.ludoColor];
                 return (
@@ -1509,7 +1519,7 @@ export function GameBoard({
                       soundFx.move();
                       onMoveToken(idx);
                     }}
-                    className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-colors min-h-[40px] cursor-pointer shadow-sm border border-white/25 ${cStyle.chipBtn}`}
+                    className={`flex-1 sm:flex-initial px-3.5 py-2 text-xs font-bold rounded-lg transition-colors min-h-[44px] touch-manipulation cursor-pointer shadow-sm border border-white/25 ${cStyle.chipBtn}`}
                   >
                     Move #{idx + 1}
                   </button>

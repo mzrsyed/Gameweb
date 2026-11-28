@@ -172,6 +172,30 @@ interface ServerLobby extends LobbyDetail {
 
 const sessions = new Map<WebSocket, ClientSession>();
 const lobbies = new Map<string, ServerLobby>();
+const pendingDisconnectTimers = new Map<string, NodeJS.Timeout>();
+
+function clearPendingDisconnect(uid: string, lobbyId: string) {
+  const key = `${uid}:${lobbyId}`;
+  const existing = pendingDisconnectTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+    pendingDisconnectTimers.delete(key);
+  }
+}
+
+function restoreSessionLobbyIfAny(ws: WebSocket, session: ClientSession) {
+  for (const lobby of lobbies.values()) {
+    const inLobby =
+      lobby.players.some((pl) => pl.uid === session.uid) ||
+      lobby.spectators.some((sp) => sp.uid === session.uid);
+    if (inLobby) {
+      clearPendingDisconnect(session.uid, lobby.id);
+      session.lobbyId = lobby.id;
+      sendJson(ws, 'lobby:state', toLobbyDetail(lobby));
+      return;
+    }
+  }
+}
 
 function sanitizeStr(input: unknown, maxLen: number): string {
   if (typeof input !== 'string') return '';
@@ -761,13 +785,22 @@ async function main() {
 
       // Guest Session (Play Without Login)
       if (msg.type === 'auth:guest') {
+        const requestedGuestId =
+          typeof p.guestId === 'string' && /^guest-[a-z0-9]{4,24}$/i.test(p.guestId.trim())
+            ? p.guestId.trim()
+            : '';
         if (!session.isGuest) {
           if (session.lobbyId) {
             removeUserFromLobby(session.uid, session.lobbyId);
             session.lobbyId = null;
           }
-          const nextSuffix = crypto.randomBytes(4).toString('hex');
-          session.uid = `guest-${nextSuffix}`;
+          session.uid = requestedGuestId || `guest-${crypto.randomBytes(4).toString('hex')}`;
+        } else if (requestedGuestId && session.uid !== requestedGuestId) {
+          if (session.lobbyId) {
+            removeUserFromLobby(session.uid, session.lobbyId);
+            session.lobbyId = null;
+          }
+          session.uid = requestedGuestId;
         }
         session.isGuest = true;
         const requestedName = sanitizeStr(p.username, 24);
@@ -780,6 +813,7 @@ async function main() {
           isGuest: true,
           username: session.username,
         });
+        restoreSessionLobbyIfAny(ws, session);
         broadcastPresence();
         return;
       }
@@ -806,6 +840,7 @@ async function main() {
             isGuest: false,
             username: session.username,
           });
+          restoreSessionLobbyIfAny(ws, session);
           broadcastPresence();
         } catch (err) {
           sendJson(ws, 'error', { message: err instanceof Error ? err.message : 'Auth rejected' });
@@ -1151,7 +1186,23 @@ async function main() {
       if (session) {
         const stillConnected = Array.from(sessions.values()).some((s) => s.uid === session.uid);
         if (!stillConnected && session.lobbyId) {
-          removeUserFromLobby(session.uid, session.lobbyId);
+          const lobby = lobbies.get(session.lobbyId);
+          if (lobby && lobby.status === 'in_progress') {
+            const uid = session.uid;
+            const lobbyId = session.lobbyId;
+            clearPendingDisconnect(uid, lobbyId);
+            const timer = setTimeout(() => {
+              pendingDisconnectTimers.delete(`${uid}:${lobbyId}`);
+              const activeAgain = Array.from(sessions.values()).some((s) => s.uid === uid);
+              if (!activeAgain) {
+                removeUserFromLobby(uid, lobbyId);
+                broadcastPresence();
+              }
+            }, 15000);
+            pendingDisconnectTimers.set(`${uid}:${lobbyId}`, timer);
+          } else {
+            removeUserFromLobby(session.uid, session.lobbyId);
+          }
         }
         broadcastPresence();
       }

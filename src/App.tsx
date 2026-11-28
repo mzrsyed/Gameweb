@@ -232,7 +232,7 @@ export default function App() {
   const activeDisplayName = profile?.username || guestName;
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#071126] text-slate-900 dark:text-slate-100 pb-16 md:pb-0">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#071126] text-slate-900 dark:text-slate-100 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
       <TopNav
         activeSection={activeSection}
         onNavigate={(sec) => setActiveSection(sec)}
@@ -305,8 +305,10 @@ export default function App() {
             guestName={guestName}
             onUpdateGuestName={handleUpdateGuestName}
             darkMode={darkMode}
+            soundOn={soundOn}
             pushEnabled={pushEnabled}
             onToggleDarkMode={handleToggleDarkMode}
+            onToggleSound={() => setSoundOn((v) => !v)}
             onTogglePushNotifications={() => void handleTogglePushNotifications()}
             onRequestSignIn={() => void handleSignIn()}
             onSignOut={() => void handleSignOut()}
@@ -319,7 +321,7 @@ export default function App() {
       </main>
 
       {toasts.length > 0 && (
-        <div className="fixed bottom-16 md:bottom-5 right-4 z-50 space-y-2 max-w-xs w-full pointer-events-none">
+        <div className="fixed inset-x-3 sm:inset-x-auto sm:right-4 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-5 z-50 space-y-2 sm:max-w-xs sm:w-full pointer-events-none">
           {toasts.map((t) => (
             <div
               key={t.id}
