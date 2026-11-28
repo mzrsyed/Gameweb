@@ -33,35 +33,32 @@ const TARGET_FACE_ROTATION: Record<number, { x: number; y: number }> = {
 
 const DICE_MATERIAL: Record<
   MapTheme,
-  { face: string; pip: string; onePip: string; tray: string }
+  { face: string; pip: string; onePip: string }
 > = {
   'Obsidian Grid': {
-    face: 'bg-gradient-to-br from-white via-slate-50 to-slate-200 border-amber-300/80 shadow-[inset_0_1px_2px_rgba(255,255,255,0.95)]',
+    face: 'bg-gradient-to-br from-white via-slate-50 to-slate-200 border-slate-300 shadow-[inset_0_1px_2px_rgba(255,255,255,0.95)]',
     pip: 'bg-slate-900 shadow-[inset_0_1px_1px_rgba(0,0,0,0.45)]',
     onePip: 'bg-rose-600 shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)]',
-    tray: 'bg-[#09152E] border-amber-400/35',
   },
   'Alpine Bastion': {
     face: 'bg-gradient-to-br from-white via-sky-50 to-slate-200 border-sky-300 shadow-[inset_0_1px_2px_rgba(255,255,255,0.95)]',
     pip: 'bg-slate-900 shadow-[inset_0_1px_1px_rgba(0,0,0,0.35)]',
     onePip: 'bg-rose-600 shadow-[inset_0_1px_2px_rgba(0,0,0,0.3)]',
-    tray: 'bg-sky-950/85 border-sky-400/40',
   },
   'Solaris Circuit': {
     face: 'bg-gradient-to-br from-amber-50 via-stone-100 to-amber-200 border-amber-400 shadow-[inset_0_1px_2px_rgba(255,255,255,0.95)]',
     pip: 'bg-stone-900 shadow-[inset_0_1px_1px_rgba(0,0,0,0.4)]',
     onePip: 'bg-red-600 shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)]',
-    tray: 'bg-stone-900/95 border-amber-500/45',
   },
 };
 
-const COLOR_TRAY_RING: Record<LudoColor, string> = {
-  red: 'border-rose-500/60 bg-rose-950/40',
-  green: 'border-emerald-500/60 bg-emerald-950/40',
-  yellow: 'border-amber-400/60 bg-amber-950/40',
-  blue: 'border-blue-500/60 bg-blue-950/40',
-  purple: 'border-violet-500/60 bg-violet-950/40',
-  cyan: 'border-cyan-400/60 bg-cyan-950/40',
+const COLOR_TRAY_ACTIVE: Record<LudoColor, string> = {
+  blue: 'bg-gradient-to-b from-blue-500/35 to-blue-900/75 border-amber-300',
+  red: 'bg-gradient-to-b from-rose-500/35 to-rose-900/75 border-amber-300',
+  green: 'bg-gradient-to-b from-emerald-500/40 to-emerald-900/80 border-lime-300',
+  yellow: 'bg-gradient-to-b from-amber-400/35 to-amber-900/75 border-amber-300',
+  purple: 'bg-gradient-to-b from-violet-500/35 to-violet-900/75 border-amber-300',
+  cyan: 'bg-gradient-to-b from-cyan-400/35 to-cyan-900/75 border-amber-300',
 };
 
 function CubeFace({
@@ -81,7 +78,7 @@ function CubeFace({
   return (
     <div
       style={{ transform }}
-      className={`backface-hidden absolute inset-0 rounded-lg border p-1.5 grid grid-cols-3 grid-rows-3 gap-0.5 ${material.face}`}
+      className={`backface-hidden absolute inset-0 rounded-[7px] border p-1.5 grid grid-cols-3 grid-rows-3 gap-0.5 ${material.face}`}
     >
       {Array.from({ length: 9 }).map((_, idx) => {
         const active = pips.includes(idx);
@@ -146,9 +143,11 @@ export function LudoDice3D({
     onRoll();
   };
 
-  const trayClasses = playerColor
-    ? `${material.tray} ${COLOR_TRAY_RING[playerColor]}`
-    : material.tray;
+  const trayStyle = inactive
+    ? 'bg-gradient-to-b from-[#FBECEE] to-[#D8C5C9] border-amber-300/80 shadow-inner'
+    : playerColor
+      ? COLOR_TRAY_ACTIVE[playerColor]
+      : 'bg-[#09152E] border-amber-400/60';
 
   return (
     <button
@@ -162,54 +161,62 @@ export function LudoDice3D({
             ? `Dice showing ${value}`
             : 'Waiting for turn'
       }
-      className={`group relative rounded-xl border flex items-center justify-center shrink-0 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
-        small ? 'w-[52px] h-[52px]' : 'w-[62px] h-[62px]'
-      } ${trayClasses} ${
+      className={`group relative rounded-xl border-2 flex items-center justify-center shrink-0 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+        small ? 'w-[50px] h-[50px]' : 'w-[60px] h-[60px]'
+      } ${trayStyle} ${
         inactive
-          ? 'opacity-55 scale-90 cursor-default'
+          ? 'opacity-80 cursor-default'
           : canRoll
-            ? 'cursor-pointer ring-2 ring-amber-400 hover:scale-105 active:scale-95 shadow-[0_0_18px_rgba(245,158,11,0.45)]'
-            : 'cursor-default opacity-95'
+            ? 'cursor-pointer ring-2 ring-lime-400 hover:scale-105 active:scale-95 shadow-[0_0_18px_rgba(163,230,53,0.55)]'
+            : 'cursor-default opacity-100'
       }`}
     >
-      {/* Recessed tray cast shadow */}
-      <span
-        aria-hidden="true"
-        className={`absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-black/45 blur-[3px] transition-transform duration-300 ${
-          small ? 'w-7 h-1.5' : 'w-9 h-2'
-        } ${isRollingAnim ? 'scale-75 opacity-50' : 'scale-100 opacity-85'}`}
-      />
+      {/* Resting empty tray look when inactive & never rolled yet, or show 3D die */}
+      {inactive && value === null ? (
+        <span
+          aria-hidden="true"
+          className="w-4 h-4 rounded-full border border-rose-300/60 bg-white/40"
+        />
+      ) : (
+        <>
+          <span
+            aria-hidden="true"
+            className={`absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-black/40 blur-[3px] transition-transform duration-300 ${
+              small ? 'w-7 h-1.5' : 'w-9 h-2'
+            } ${isRollingAnim ? 'scale-75 opacity-50' : 'scale-100 opacity-85'}`}
+          />
 
-      {/* 3D Perspective Stage */}
-      <div
-        className={`${small ? 'w-9 h-9' : 'w-11 h-11'} relative preserve-3d`}
-        style={{ perspective: '420px' }}
-      >
-        <div
-          className="w-full h-full relative preserve-3d"
-          style={{
-            transform: isRollingAnim
-              ? 'rotateX(-28deg) rotateY(32deg) translateY(-5px)'
-              : 'rotateX(-16deg) rotateY(20deg)',
-            transition: 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-        >
           <div
-            className="w-full h-full relative preserve-3d"
-            style={{
-              transform: `rotateX(${rotX}deg) rotateY(${rotY}deg)`,
-              transition: 'transform 480ms cubic-bezier(0.22, 1, 0.36, 1)',
-            }}
+            className={`${small ? 'w-9 h-9' : 'w-11 h-11'} relative preserve-3d`}
+            style={{ perspective: '420px' }}
           >
-            <CubeFace faceNum={1} transform={`rotateY(0deg) translateZ(${depth}px)`} material={material} small={small} />
-            <CubeFace faceNum={6} transform={`rotateY(180deg) translateZ(${depth}px)`} material={material} small={small} />
-            <CubeFace faceNum={2} transform={`rotateY(90deg) translateZ(${depth}px)`} material={material} small={small} />
-            <CubeFace faceNum={5} transform={`rotateY(-90deg) translateZ(${depth}px)`} material={material} small={small} />
-            <CubeFace faceNum={3} transform={`rotateX(90deg) translateZ(${depth}px)`} material={material} small={small} />
-            <CubeFace faceNum={4} transform={`rotateX(-90deg) translateZ(${depth}px)`} material={material} small={small} />
+            <div
+              className="w-full h-full relative preserve-3d"
+              style={{
+                transform: isRollingAnim
+                  ? 'rotateX(-28deg) rotateY(32deg) translateY(-5px)'
+                  : 'rotateX(-14deg) rotateY(18deg)',
+                transition: 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+            >
+              <div
+                className="w-full h-full relative preserve-3d"
+                style={{
+                  transform: `rotateX(${rotX}deg) rotateY(${rotY}deg)`,
+                  transition: 'transform 480ms cubic-bezier(0.22, 1, 0.36, 1)',
+                }}
+              >
+                <CubeFace faceNum={1} transform={`rotateY(0deg) translateZ(${depth}px)`} material={material} small={small} />
+                <CubeFace faceNum={6} transform={`rotateY(180deg) translateZ(${depth}px)`} material={material} small={small} />
+                <CubeFace faceNum={2} transform={`rotateY(90deg) translateZ(${depth}px)`} material={material} small={small} />
+                <CubeFace faceNum={5} transform={`rotateY(-90deg) translateZ(${depth}px)`} material={material} small={small} />
+                <CubeFace faceNum={3} transform={`rotateX(90deg) translateZ(${depth}px)`} material={material} small={small} />
+                <CubeFace faceNum={4} transform={`rotateX(-90deg) translateZ(${depth}px)`} material={material} small={small} />
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </button>
   );
 }

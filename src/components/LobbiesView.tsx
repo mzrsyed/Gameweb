@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Bot,
   Crown,
-  Dices,
+  Globe,
   Lock,
   MessageSquare,
   Plus,
   Send,
-  Settings2,
+  Smartphone,
   UserPlus,
   Users,
 } from 'lucide-react';
@@ -24,33 +24,12 @@ import { AvatarBadge } from './AvatarBadge';
 import { GameBoard } from './GameBoard';
 import { soundFx } from '../lib/sound';
 
-const BOARD_THEME_LABELS: Record<
-  MapTheme,
-  { name: string; swatch: string; desc: string }
-> = {
-  'Obsidian Grid': {
-    name: 'Royal Navy & Gold',
-    swatch: 'from-[#0D1E42] via-[#132956] to-[#B45309]',
-    desc: 'Classic Ludo King royal blue frame with gold trim',
-  },
-  'Alpine Bastion': {
-    name: 'Ivory & Slate',
-    swatch: 'from-slate-100 via-slate-200 to-sky-700',
-    desc: 'Crisp tournament daylight board with cobalt lanes',
-  },
-  'Solaris Circuit': {
-    name: 'Bronze & Obsidian',
-    swatch: 'from-stone-900 via-amber-950 to-amber-500',
-    desc: 'Engraved amber-gold board with dark obsidian rim',
-  },
-};
-
 const LUDO_COLOR_DOT: Record<LudoColor, string> = {
-  red: 'bg-red-500',
-  green: 'bg-emerald-500',
-  yellow: 'bg-amber-400',
-  blue: 'bg-blue-500',
-  purple: 'bg-purple-500',
+  blue: 'bg-[#1777EC]',
+  red: 'bg-[#E31E24]',
+  green: 'bg-[#009E49]',
+  yellow: 'bg-[#F7D117]',
+  purple: 'bg-violet-500',
   cyan: 'bg-cyan-400',
 };
 
@@ -62,6 +41,8 @@ interface LobbiesViewProps {
   myUid: string | null;
   isSignedIn: boolean;
   displayName: string;
+  soundOn: boolean;
+  onToggleSound: () => void;
   showCreateModal: boolean;
   onCloseCreateModal: () => void;
   onOpenCreateModal: () => void;
@@ -76,6 +57,8 @@ interface LobbiesViewProps {
     accessCode: string;
     allowSpectators: boolean;
     soloPractice: boolean;
+    isLocalPassPlay?: boolean;
+    autoStart?: boolean;
   }) => void;
   onJoinLobby: (lobbyId: string, accessCode?: string) => void;
   onLeaveLobby: () => void;
@@ -112,6 +95,8 @@ export function LobbiesView({
   myUid,
   isSignedIn,
   displayName,
+  soundOn,
+  onToggleSound,
   showCreateModal,
   onCloseCreateModal,
   onOpenCreateModal,
@@ -129,25 +114,21 @@ export function LobbiesView({
   onInvitePlayer,
   onMatchCompleted,
 }: LobbiesViewProps) {
+  const [quickSeats, setQuickSeats] = useState<2 | 3 | 4 | 5 | 6>(4);
   const [search, setSearch] = useState('');
   const [capacityFilter, setCapacityFilter] = useState<'All' | 2 | 3 | 4 | 5 | 6>('All');
   const [privateJoinTarget, setPrivateJoinTarget] = useState<LobbySummary | null>(null);
   const [joinCode, setJoinCode] = useState('');
 
-  // Create Ludo Table Form State
+  // Streamlined Create Room Modal State
   const [roomName, setRoomName] = useState('');
-  const [mapTheme, setMapTheme] = useState<MapTheme>('Obsidian Grid');
   const [maxPlayers, setMaxPlayers] = useState<2 | 3 | 4 | 5 | 6>(4);
   const [turnTimeSec, setTurnTimeSec] = useState<10 | 15 | 30>(15);
-  const [isRanked, setIsRanked] = useState(false);
   const [isPrivate, setIsPrivate] = useState(false);
   const [accessCode, setAccessCode] = useState('');
-  const [allowSpectators, setAllowSpectators] = useState(true);
-  const [soloPractice, setSoloPractice] = useState(false);
 
   // Active Room State
   const [chatInput, setChatInput] = useState('');
-  const [showCustomizeDrawer, setShowCustomizeDrawer] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const recordedOutcomeRef = useRef<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -167,7 +148,7 @@ export function LobbiesView({
         if (activeLobby.lastOutcome.winnerId === myUid) {
           soundFx.win();
         }
-        if (profile && !activeLobby.lastOutcome.hasCpu) {
+        if (profile && !activeLobby.lastOutcome.hasCpu && !activeLobby.isLocalPassPlay) {
           onMatchCompleted(activeLobby);
         }
       }
@@ -177,24 +158,27 @@ export function LobbiesView({
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onCreateLobby({
-      name: roomName.trim() || `${displayName}'s Royal Table`,
-      mapTheme,
+      name: roomName.trim() || `${displayName}'s Ludo Room`,
+      mapTheme: 'Obsidian Grid',
       maxPlayers,
       turnTimeSec,
-      isRanked: isSignedIn && !soloPractice ? isRanked : false,
+      isRanked: isSignedIn,
       isPrivate,
       accessCode: isPrivate ? accessCode.trim() : '',
-      allowSpectators,
-      soloPractice,
+      allowSpectators: true,
+      soloPractice: false,
+      isLocalPassPlay: false,
+      autoStart: false,
     });
     setRoomName('');
     setAccessCode('');
+    setIsPrivate(false);
     onCloseCreateModal();
   };
 
-  const launchInstantCpuTable = (seats: 4 | 6) => {
+  const launchCpuMatch = (seats: 2 | 3 | 4 | 5 | 6) => {
     onCreateLobby({
-      name: `${displayName}'s ${seats}P CPU Arena`,
+      name: `${seats}P Computer Ludo`,
       mapTheme: 'Obsidian Grid',
       maxPlayers: seats,
       turnTimeSec: 15,
@@ -203,162 +187,104 @@ export function LobbiesView({
       accessCode: '',
       allowSpectators: false,
       soloPractice: true,
+      isLocalPassPlay: false,
+      autoStart: true,
     });
   };
 
-  // --- Active Ludo Lobby / Live 3D Box Arena ---
+  const launchPassAndPlayMatch = (seats: 2 | 3 | 4 | 5 | 6) => {
+    onCreateLobby({
+      name: `${seats}P Pass & Play`,
+      mapTheme: 'Obsidian Grid',
+      maxPlayers: seats,
+      turnTimeSec: 30,
+      isRanked: false,
+      isPrivate: false,
+      accessCode: '',
+      allowSpectators: false,
+      soloPractice: false,
+      isLocalPassPlay: true,
+      autoStart: true,
+    });
+  };
+
+  // --- Active Ludo Table / Live Ludo King Board ---
   if (activeLobby) {
     const myPlayer = activeLobby.players.find((p) => p.uid === myUid);
     const isHost = activeLobby.hostId === myUid;
-    const themeMeta = BOARD_THEME_LABELS[activeLobby.mapTheme];
+    const showSideChat = !activeLobby.soloPractice && !activeLobby.isLocalPassPlay;
     const inviteCandidates = onlinePlayers.filter(
       (op) => op.uid !== myUid && !activeLobby.players.some((pl) => pl.uid === op.uid)
     );
 
     return (
-      <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-[#1B2E54]">
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-[#1B2E54]">
           <div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <span>Ludo · {activeLobby.maxPlayers} Players</span>
+              <span className="font-semibold text-amber-600 dark:text-amber-400">
+                Ausa Ludo Master
+              </span>
               <span aria-hidden="true">·</span>
-              <span>{themeMeta.name}</span>
+              <span>{activeLobby.maxPlayers} Players</span>
               <span aria-hidden="true">·</span>
-              <span>{activeLobby.isRanked ? 'Ranked ELO' : 'Casual'}</span>
-              <span aria-hidden="true">·</span>
-              <span className="font-mono tabular-nums">{activeLobby.turnTimeSec}s turn</span>
+              <span>
+                {activeLobby.soloPractice
+                  ? 'vs Computer'
+                  : activeLobby.isLocalPassPlay
+                    ? 'Pass & Play'
+                    : 'Online Room'}
+              </span>
             </div>
-            <h1 className="font-display text-2xl font-bold text-slate-900 dark:text-white mt-1">
+            <h1 className="font-display text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mt-0.5">
               {activeLobby.name}
             </h1>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            {isHost && activeLobby.status === 'waiting' && (
+          <div className="flex flex-wrap items-center gap-2">
+            {showSideChat && (
               <button
                 type="button"
-                onClick={() => setShowCustomizeDrawer((v) => !v)}
-                className="px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-[#243A68] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#132245] transition-colors inline-flex items-center gap-2 whitespace-nowrap min-h-[40px] cursor-pointer"
+                onClick={() => setShowInviteModal(true)}
+                className="px-3.5 py-2 text-xs sm:text-sm font-medium rounded-lg border border-slate-300 dark:border-[#243A68] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#132245] transition-colors inline-flex items-center gap-1.5 whitespace-nowrap min-h-[40px] cursor-pointer"
               >
-                <Settings2 className="w-4 h-4" />
-                Customize Table
+                <UserPlus className="w-4 h-4" />
+                Invite
               </button>
             )}
             <button
               type="button"
-              onClick={() => setShowInviteModal(true)}
-              className="px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-[#243A68] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#132245] transition-colors inline-flex items-center gap-2 whitespace-nowrap min-h-[40px] cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" />
-              Invite
-            </button>
-            <button
-              type="button"
               onClick={onLeaveLobby}
-              className="px-3.5 py-2 text-sm font-medium rounded-lg border border-red-300 dark:border-red-900/60 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors whitespace-nowrap min-h-[40px] cursor-pointer"
+              className="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg border border-red-300 dark:border-red-900/60 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors whitespace-nowrap min-h-[40px] cursor-pointer"
             >
-              Leave Table
+              Exit Match
             </button>
           </div>
         </div>
 
-        {/* Host Inline Table Customization */}
-        {showCustomizeDrawer && isHost && activeLobby.status === 'waiting' && (
-          <div className="p-5 rounded-xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Player Seats (2–6)
-              </label>
-              <select
-                value={activeLobby.maxPlayers}
-                onChange={(e) =>
-                  onCustomizeLobby({
-                    maxPlayers: Number(e.target.value) as 2 | 3 | 4 | 5 | 6,
-                  })
-                }
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-[#243A68] bg-white dark:bg-[#071126] text-slate-900 dark:text-slate-100 min-h-[40px]"
-              >
-                <option value={2}>2 Players (Diagonal Duel)</option>
-                <option value={3}>3 Players</option>
-                <option value={4}>4 Players (Classic Square)</option>
-                <option value={5}>5 Players (Hex Star)</option>
-                <option value={6}>6 Players (Royal Hex)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Board Finish
-              </label>
-              <select
-                value={activeLobby.mapTheme}
-                onChange={(e) => onCustomizeLobby({ mapTheme: e.target.value as MapTheme })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-[#243A68] bg-white dark:bg-[#071126] text-slate-900 dark:text-slate-100 min-h-[40px]"
-              >
-                {(Object.keys(BOARD_THEME_LABELS) as MapTheme[]).map((m) => (
-                  <option key={m} value={m}>
-                    {BOARD_THEME_LABELS[m].name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-wrap items-end gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                  Turn Timer
-                </label>
-                <select
-                  value={activeLobby.turnTimeSec}
-                  onChange={(e) =>
-                    onCustomizeLobby({ turnTimeSec: Number(e.target.value) as 10 | 15 | 30 })
-                  }
-                  className="px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-[#243A68] bg-white dark:bg-[#071126] text-slate-900 dark:text-slate-100 min-h-[40px]"
-                >
-                  <option value={10}>10s Blitz</option>
-                  <option value={15}>15s Standard</option>
-                  <option value={30}>30s Tactical</option>
-                </select>
-              </div>
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 py-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={activeLobby.soloPractice}
-                  onChange={(e) => onCustomizeLobby({ soloPractice: e.target.checked })}
-                  className="rounded border-slate-300 dark:border-slate-700"
-                />
-                <span>Fill with CPU</span>
-              </label>
-            </div>
-          </div>
-        )}
-
-        {/* Main 2-Column 3D Ludo Box + Real-Time Table Chat */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          <div className="lg:col-span-8 rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-4 sm:p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          <div className={showSideChat ? 'lg:col-span-8' : 'lg:col-span-12 max-w-5xl w-full mx-auto'}>
             {activeLobby.status === 'waiting' && (
-              <div className="space-y-6">
-                <div className="rounded-xl bg-gradient-to-r from-[#0B1B3B] via-[#132B5E] to-[#1D3E84] border border-amber-500/30 p-5 flex flex-wrap items-center justify-between gap-4">
+              <div className="rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-5 sm:p-6 space-y-5">
+                <div className="rounded-xl bg-gradient-to-r from-[#0E48AC] to-[#0A3075] border border-amber-400/50 p-4 flex flex-wrap items-center justify-between gap-3 text-white">
                   <div>
-                    <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
-                      Ausa Ludo Master · {activeLobby.maxPlayers}-Player{' '}
-                      {activeLobby.maxPlayers >= 5 ? 'Hexagonal 3D Box' : 'Classic 3D Box'}
+                    <p className="text-xs font-semibold text-amber-300 uppercase tracking-wider">
+                      Waiting Room · {activeLobby.maxPlayers}-Player Ludo
                     </p>
-                    <h2 className="font-display text-xl font-bold text-white mt-1">
-                      {themeMeta.name}
+                    <h2 className="font-display text-lg font-bold mt-0.5">
+                      {activeLobby.players.length} of {activeLobby.maxPlayers} Seats Filled
                     </h2>
-                    <p className="text-xs text-slate-300 mt-0.5">{themeMeta.desc}</p>
                   </div>
-                  <div className="text-right font-mono tabular-nums text-xs text-amber-300">
-                    <p>
-                      {activeLobby.players.length} / {activeLobby.maxPlayers} Seated
-                    </p>
-                  </div>
+                  <span className="font-mono tabular-nums text-xs text-blue-100">
+                    {activeLobby.turnTimeSec}s per turn
+                  </span>
                 </div>
 
-                {/* 2-6 Seat Roster */}
+                {/* Seat Roster */}
                 <div
                   className={`grid grid-cols-1 sm:grid-cols-2 ${
                     activeLobby.maxPlayers >= 5 ? 'xl:grid-cols-3' : ''
-                  } gap-3.5`}
+                  } gap-3`}
                 >
                   {Array.from({ length: activeLobby.maxPlayers }).map((_, idx) => {
                     const slotNum = idx + 1;
@@ -384,13 +310,9 @@ export function LobbiesView({
                                 <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                                   {occupant.username}
                                 </p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums capitalize">
+                                <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">
                                   {occupant.ludoColor} ·{' '}
-                                  {occupant.isCpu
-                                    ? 'CPU'
-                                    : occupant.isGuest
-                                    ? 'Guest'
-                                    : `${occupant.rating} ELO`}
+                                  {occupant.isCpu ? 'CPU' : occupant.isGuest ? 'Guest' : `${occupant.rating} ELO`}
                                 </p>
                               </div>
                             </div>
@@ -413,7 +335,7 @@ export function LobbiesView({
                                 onClick={() => onCustomizeLobby({ soloPractice: true })}
                                 className="font-semibold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
                               >
-                                + Add CPU
+                                + Fill with CPU
                               </button>
                             )}
                           </div>
@@ -426,8 +348,8 @@ export function LobbiesView({
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200 dark:border-[#1B2E54]">
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     {activeLobby.players.length < 2
-                      ? 'Invite players or click "+ Add CPU" to start immediately.'
-                      : 'All seats set. Host can start the 3D Ludo match.'}
+                      ? 'Invite another player or click "+ Fill with CPU" to begin.'
+                      : 'Ready to roll! Host can start the match.'}
                   </p>
                   <div className="flex items-center gap-3">
                     {myPlayer && !isHost && (
@@ -444,7 +366,7 @@ export function LobbiesView({
                         type="button"
                         disabled={activeLobby.players.length < 2}
                         onClick={onStartMatch}
-                        className="px-5 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 transition-all min-h-[40px] cursor-pointer"
+                        className="px-5 py-2 text-sm font-bold rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 transition-all min-h-[40px] cursor-pointer"
                       >
                         Start Ludo Match
                       </button>
@@ -460,128 +382,131 @@ export function LobbiesView({
                 mapTheme={activeLobby.mapTheme}
                 players={activeLobby.players}
                 myUid={myUid}
+                isHost={isHost}
+                isLocalPassPlay={Boolean(activeLobby.isLocalPassPlay)}
+                turnTimeSec={activeLobby.turnTimeSec}
+                soundOn={soundOn}
+                onToggleSound={onToggleSound}
                 onRollDice={onRollDice}
                 onMoveToken={onMoveToken}
               />
             )}
 
             {activeLobby.status === 'finished' && activeLobby.lastOutcome && (
-              <div className="py-8 space-y-6">
-                <div className="text-center space-y-2">
-                  <Crown className="w-10 h-10 text-amber-500 mx-auto" />
-                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Ausa Ludo Master · {activeLobby.lastOutcome.playerIds.length}-Player Match
+              <div className="rounded-2xl border-2 border-amber-400/70 bg-gradient-to-b from-[#0E48AC] to-[#082B70] p-8 text-center text-white space-y-5 shadow-2xl">
+                <Crown className="w-12 h-12 text-amber-300 mx-auto" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-300 uppercase tracking-wider">
+                    Ausa Ludo Master Champion
                   </p>
-                  <h2 className="font-display text-3xl font-bold text-slate-900 dark:text-white">
+                  <h2 className="font-display text-3xl font-bold mt-1">
                     {activeLobby.lastOutcome.winnerName} Wins!
                   </h2>
-                  <p className="font-mono tabular-nums text-sm sm:text-base font-semibold text-amber-600 dark:text-amber-400">
-                    {activeLobby.lastOutcome.playerNames
-                      .map((name, idx) => `${name}: ${activeLobby.lastOutcome!.scores[idx]}`)
-                      .join(' · ')}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-                    Match Duration: {activeLobby.lastOutcome.durationSec}s
-                  </p>
                 </div>
-
-                <div className="flex flex-wrap items-center justify-center gap-3">
+                <p className="font-mono tabular-nums text-sm text-blue-100">
+                  {activeLobby.lastOutcome.playerNames
+                    .map((name, idx) => `${name}: ${activeLobby.lastOutcome!.scores[idx]}`)
+                    .join(' · ')}
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                   <button
                     type="button"
                     onClick={onRematch}
-                    className="px-5 py-2.5 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 transition-all min-h-[44px] cursor-pointer"
+                    className="px-6 py-2.5 text-sm font-bold rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 transition-all min-h-[44px] cursor-pointer"
                   >
                     Play Again
                   </button>
                   <button
                     type="button"
                     onClick={onLeaveLobby}
-                    className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 dark:border-[#243A68] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#132245] transition-colors min-h-[44px] cursor-pointer"
+                    className="px-5 py-2.5 text-sm font-semibold rounded-lg border border-white/25 bg-white/10 hover:bg-white/20 text-white transition-colors min-h-[44px] cursor-pointer"
                   >
-                    Back to Tables
+                    Back to Home
                   </button>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Right: Real-Time Room Chat */}
-          <div className="lg:col-span-4 rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] flex flex-col h-[520px]">
-            <div className="px-4 py-3 border-b border-slate-200 dark:border-[#1B2E54] flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
-                <MessageSquare className="w-4 h-4 text-amber-500" />
-                <span>Table Chat</span>
+          {/* Right: Live Room Chat (Online Tables Only) */}
+          {showSideChat && (
+            <div className="lg:col-span-4 rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] flex flex-col h-[500px]">
+              <div className="px-4 py-3 border-b border-slate-200 dark:border-[#1B2E54] flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
+                  <MessageSquare className="w-4 h-4 text-amber-500" />
+                  <span>Room Chat</span>
+                </div>
+                <span className="text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400">
+                  {activeLobby.players.length}/{activeLobby.maxPlayers} seated
+                </span>
               </div>
-              <span className="text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400">
-                {activeLobby.players.length}/{activeLobby.maxPlayers} seated
-              </span>
-            </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {activeLobby.chatMessages.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-8">
-                  No messages yet. Say hello to the table.
-                </p>
-              ) : (
-                activeLobby.chatMessages.map((m: ChatMessage) => (
-                  <div
-                    key={m.id}
-                    className={
-                      m.channel === 'system'
-                        ? 'text-xs text-slate-500 dark:text-slate-400 italic'
-                        : 'text-sm space-y-0.5'
-                    }
-                  >
-                    {m.channel === 'system' ? (
-                      <p>{m.text}</p>
-                    ) : (
-                      <>
-                        <div className="flex items-baseline gap-2">
-                          <span className="font-semibold text-xs text-slate-900 dark:text-white">
-                            {m.senderName}
-                          </span>
-                          <span className="text-[11px] font-mono tabular-nums text-slate-400">
-                            {new Date(m.timestamp).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                        </div>
-                        <p className="text-slate-700 dark:text-slate-300 break-words">{m.text}</p>
-                      </>
-                    )}
-                  </div>
-                ))
-              )}
-              <div ref={chatEndRef} />
-            </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {activeLobby.chatMessages.length === 0 ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-8">
+                    No messages yet. Say hello!
+                  </p>
+                ) : (
+                  activeLobby.chatMessages.map((m: ChatMessage) => (
+                    <div
+                      key={m.id}
+                      className={
+                        m.channel === 'system'
+                          ? 'text-xs text-slate-500 dark:text-slate-400 italic'
+                          : 'text-sm space-y-0.5'
+                      }
+                    >
+                      {m.channel === 'system' ? (
+                        <p>{m.text}</p>
+                      ) : (
+                        <>
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-semibold text-xs text-slate-900 dark:text-white">
+                              {m.senderName}
+                            </span>
+                            <span className="text-[11px] font-mono tabular-nums text-slate-400">
+                              {new Date(m.timestamp).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                          <p className="text-slate-700 dark:text-slate-300 break-words">{m.text}</p>
+                        </>
+                      )}
+                    </div>
+                  ))
+                )}
+                <div ref={chatEndRef} />
+              </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!chatInput.trim()) return;
-                onSendChat(chatInput);
-                setChatInput('');
-              }}
-              className="p-3 border-t border-slate-200 dark:border-[#1B2E54] flex items-center gap-2"
-            >
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                maxLength={280}
-                placeholder="Message table..."
-                className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-[#243A68] bg-slate-50 dark:bg-[#071126] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[40px]"
-              />
-              <button
-                type="submit"
-                aria-label="Send message"
-                className="px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!chatInput.trim()) return;
+                  onSendChat(chatInput);
+                  setChatInput('');
+                }}
+                className="p-3 border-t border-slate-200 dark:border-[#1B2E54] flex items-center gap-2"
               >
-                <Send className="w-4 h-4" />
-              </button>
-            </form>
-          </div>
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  maxLength={280}
+                  placeholder="Message room..."
+                  className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-[#243A68] bg-slate-50 dark:bg-[#071126] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[40px]"
+                />
+                <button
+                  type="submit"
+                  aria-label="Send message"
+                  className="px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </form>
+            </div>
+          )}
         </div>
 
         {/* Invite Modal */}
@@ -602,7 +527,7 @@ export function LobbiesView({
               </div>
               {inviteCandidates.length === 0 ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400 py-4">
-                  No other players online right now. Open another browser tab to test multiplayer or add CPU bots.
+                  No other online players right now. Share your room or open a second tab to play together.
                 </p>
               ) : (
                 <div className="divide-y divide-slate-200 dark:divide-[#1B2E54] max-h-64 overflow-y-auto">
@@ -644,69 +569,124 @@ export function LobbiesView({
     );
   }
 
-  // --- Ausa Ludo Master Lobby Hub ---
+  // --- Ausa Ludo Master Home Hub (Clean Ludo King Modes) ---
   const filteredLobbies = lobbies.filter((l) => {
     if (capacityFilter !== 'All' && l.maxPlayers !== capacityFilter) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
-      return (
-        l.name.toLowerCase().includes(q) ||
-        l.hostName.toLowerCase().includes(q) ||
-        BOARD_THEME_LABELS[l.mapTheme].name.toLowerCase().includes(q)
-      );
+      return l.name.toLowerCase().includes(q) || l.hostName.toLowerCase().includes(q);
     }
     return true;
   });
 
   return (
     <div className="space-y-8">
-      {/* Royal Ludo King Hub Banner */}
-      <section className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-[#0B1B3B] via-[#102652] to-[#08132B] p-6 sm:p-8 text-white shadow-xl">
+      {/* Ludo King Royal Blue Arena Launch Hub */}
+      <section className="rounded-2xl border-2 border-amber-400/70 bg-gradient-to-br from-[#0E48AC] via-[#0B3A8C] to-[#072459] p-6 sm:p-8 text-white shadow-xl space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2.5 max-w-2xl">
-            <div className="inline-flex items-center gap-2 text-xs font-semibold text-amber-400 uppercase tracking-wider">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-2 text-xs font-bold text-amber-300 uppercase tracking-wider">
               <Crown className="w-4 h-4" />
-              <span>Ausa Ludo Master · 3D Royal Arena</span>
+              <span>Ausa Ludo Master</span>
             </div>
-            <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight [text-wrap:balance]">
-              Play 2 to 6 Player 3D Ludo Live — No Login Required
+            <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight">
+              Classic Ludo for 2 to 6 Players — Play Instantly
             </h1>
-            <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
-              Roll turn-wise animated 3D dice on our raised royal Ludo box. Jump straight into online multiplayer tables as a guest, challenge CPU bots, or sign in to climb Ranked ELO.
+            <p className="text-sm sm:text-base text-blue-100/90">
+              Separate turn-by-turn dice for every player, computer opponents, local Pass &amp; Play, or live online rooms without signing in.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={onOpenCreateModal}
-              className="px-5 py-3 text-sm font-bold rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 shadow-lg transition-all inline-flex items-center gap-2 min-h-[46px] cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              Create 2–6P Table
-            </button>
-            <button
-              type="button"
-              onClick={() => launchInstantCpuTable(4)}
-              className="px-4 py-3 text-sm font-semibold rounded-xl border border-amber-400/40 bg-[#0D1E42]/80 hover:bg-[#173063] text-amber-300 transition-colors inline-flex items-center gap-2 min-h-[46px] cursor-pointer"
-            >
-              <Bot className="w-4 h-4" />
-              Quick 4P vs CPU
-            </button>
-            <button
-              type="button"
-              onClick={() => launchInstantCpuTable(6)}
-              className="px-4 py-3 text-sm font-semibold rounded-xl border border-blue-400/35 bg-[#0D1E42]/80 hover:bg-[#173063] text-blue-200 transition-colors inline-flex items-center gap-2 min-h-[46px] cursor-pointer"
-            >
-              <Dices className="w-4 h-4" />
-              Quick 6P Hex vs CPU
-            </button>
+          {/* Player Count Selector (2P to 6P) */}
+          <div className="rounded-xl border border-amber-400/50 bg-[#082B70]/85 p-3.5 space-y-2.5 shrink-0">
+            <p className="text-xs font-bold text-amber-300 uppercase tracking-wider">
+              Select Players (2–6)
+            </p>
+            <div className="flex items-center gap-1.5">
+              {([2, 3, 4, 5, 6] as const).map((count) => (
+                <button
+                  key={count}
+                  type="button"
+                  onClick={() => setQuickSeats(count)}
+                  className={`w-11 h-10 rounded-lg font-bold text-sm transition-all cursor-pointer ${
+                    quickSeats === count
+                      ? 'bg-amber-400 text-slate-950 shadow-md scale-105'
+                      : 'bg-white/10 text-blue-100 hover:bg-white/20'
+                  }`}
+                >
+                  {count}P
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300 font-mono tabular-nums">
+        {/* 3 Clear Launch Mode Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <button
+            type="button"
+            onClick={() => launchCpuMatch(quickSeats)}
+            className="text-left rounded-xl border-2 border-amber-400/75 bg-gradient-to-b from-[#1356C9] to-[#0B398C] hover:from-[#1A64E0] hover:to-[#0F46AB] p-4 transition-all shadow-lg cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="w-10 h-10 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center">
+                <Bot className="w-5 h-5" />
+              </span>
+              <span className="text-xs font-bold text-amber-300">{quickSeats} Players</span>
+            </div>
+            <h2 className="font-display text-lg font-bold mt-3 group-hover:text-amber-300 transition-colors">
+              Play vs Computer
+            </h2>
+            <p className="text-xs text-blue-100/85 mt-1">
+              Start immediately against {quickSeats - 1} smart CPU {quickSeats === 2 ? 'opponent' : 'opponents'}.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => launchPassAndPlayMatch(quickSeats)}
+            className="text-left rounded-xl border-2 border-amber-400/75 bg-gradient-to-b from-[#1356C9] to-[#0B398C] hover:from-[#1A64E0] hover:to-[#0F46AB] p-4 transition-all shadow-lg cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="w-10 h-10 rounded-lg bg-emerald-400 text-slate-950 flex items-center justify-center">
+                <Smartphone className="w-5 h-5" />
+              </span>
+              <span className="text-xs font-bold text-emerald-300">{quickSeats} Players</span>
+            </div>
+            <h2 className="font-display text-lg font-bold mt-3 group-hover:text-amber-300 transition-colors">
+              Pass &amp; Play
+            </h2>
+            <p className="text-xs text-blue-100/85 mt-1">
+              Play together on one screen with friends and family.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMaxPlayers(quickSeats);
+              onOpenCreateModal();
+            }}
+            className="text-left rounded-xl border-2 border-amber-400/75 bg-gradient-to-b from-[#1356C9] to-[#0B398C] hover:from-[#1A64E0] hover:to-[#0F46AB] p-4 transition-all shadow-lg cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="w-10 h-10 rounded-lg bg-white text-[#0E48AC] flex items-center justify-center">
+                <Globe className="w-5 h-5" />
+              </span>
+              <span className="text-xs font-bold text-amber-300">2–6 Online</span>
+            </div>
+            <h2 className="font-display text-lg font-bold mt-3 group-hover:text-amber-300 transition-colors">
+              Create Online Room
+            </h2>
+            <p className="text-xs text-blue-100/85 mt-1">
+              Host a live public or private room with WebSocket chat.
+            </p>
+          </button>
+        </div>
+
+        <div className="pt-3 border-t border-white/15 flex flex-wrap items-center justify-between gap-3 text-xs text-blue-100/90 font-mono tabular-nums">
           <div className="flex flex-wrap items-center gap-4">
-            <span>{lobbies.length} active tables</span>
+            <span>{lobbies.length} open rooms</span>
             <span aria-hidden="true">·</span>
             <span>{onlinePlayers.length} players online</span>
             <span aria-hidden="true">·</span>
@@ -719,72 +699,74 @@ export function LobbiesView({
             <button
               type="button"
               onClick={onRequestSignIn}
-              className="font-sans font-semibold text-amber-400 hover:text-amber-300 hover:underline cursor-pointer"
+              className="font-sans font-semibold text-amber-300 hover:underline cursor-pointer"
             >
-              Sign in with Google for Ranked ELO →
+              Sign in with Google for Leaderboard ELO →
             </button>
           )}
         </div>
       </section>
 
-      {/* Filter & Search Toolbar */}
+      {/* Open Online Rooms */}
       <section className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-[#0D1A35] border border-slate-200 dark:border-[#1B2E54] rounded-xl">
-            {([
-              { id: 'All', label: 'All' },
-              { id: 2, label: '2P' },
-              { id: 3, label: '3P' },
-              { id: 4, label: '4P' },
-              { id: 5, label: '5P' },
-              { id: 6, label: '6P' },
-            ] as const).map((opt) => (
-              <button
-                key={String(opt.id)}
-                type="button"
-                onClick={() => setCapacityFilter(opt.id)}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 min-h-[34px] cursor-pointer ${
-                  capacityFilter === opt.id
-                    ? 'bg-white dark:bg-[#193060] text-slate-900 dark:text-amber-300 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-display text-xl font-bold text-slate-900 dark:text-white mr-2">
+              Open Online Rooms
+            </h2>
+            <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-[#0D1A35] border border-slate-200 dark:border-[#1B2E54] rounded-xl">
+              {([
+                { id: 'All', label: 'All' },
+                { id: 2, label: '2P' },
+                { id: 3, label: '3P' },
+                { id: 4, label: '4P' },
+                { id: 5, label: '5P' },
+                { id: 6, label: '6P' },
+              ] as const).map((opt) => (
+                <button
+                  key={String(opt.id)}
+                  type="button"
+                  onClick={() => setCapacityFilter(opt.id)}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 min-h-[32px] cursor-pointer ${
+                    capacityFilter === opt.id
+                      ? 'bg-white dark:bg-[#193060] text-slate-900 dark:text-amber-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tables by name or host..."
-            className="w-full sm:w-72 px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[40px]"
+            placeholder="Search rooms..."
+            className="w-full sm:w-64 px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[40px]"
           />
         </div>
 
         {filteredLobbies.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-10 text-center space-y-3">
-            <Users className="w-8 h-8 text-amber-500 mx-auto" />
-            <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-white">
-              No open Ludo tables right now
-            </h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-              Create a 2-to-6 player room for friends and guests, or launch an instant CPU match.
+          <div className="rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-8 text-center space-y-3">
+            <Users className="w-7 h-7 text-amber-500 mx-auto" />
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              No online rooms open right now. Create a room above or start an instant Computer / Pass &amp; Play match!
             </p>
             <button
               type="button"
               onClick={onOpenCreateModal}
-              className="px-5 py-2.5 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 transition-all min-h-[42px] cursor-pointer"
+              className="px-4 py-2 text-sm font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 inline-flex items-center gap-1.5 min-h-[40px] cursor-pointer"
             >
-              Create Ludo Table
+              <Plus className="w-4 h-4" />
+              Create Online Room
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredLobbies.map((lobby) => {
               const isFull = lobby.players.length >= lobby.maxPlayers;
-              const themeMeta = BOARD_THEME_LABELS[lobby.mapTheme];
 
               return (
                 <article
@@ -794,12 +776,10 @@ export function LobbiesView({
                   <div className="p-5 space-y-3">
                     <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
                       <span className="font-semibold text-amber-600 dark:text-amber-400">
-                        {lobby.maxPlayers}-Player {lobby.maxPlayers >= 5 ? 'Hex' : 'Classic'}
+                        {lobby.maxPlayers}-Player {lobby.maxPlayers >= 5 ? 'Hex Ludo' : 'Classic Ludo'}
                       </span>
-                      <div className="flex items-center gap-2">
-                        <span>{lobby.isRanked ? 'Ranked' : 'Casual'}</span>
-                        <span aria-hidden="true">·</span>
-                        <span className="font-mono tabular-nums">{lobby.turnTimeSec}s</span>
+                      <div className="flex items-center gap-2 font-mono tabular-nums">
+                        <span>{lobby.turnTimeSec}s</span>
                         {lobby.isPrivate && (
                           <Lock className="w-3.5 h-3.5 text-amber-500" aria-label="Private room" />
                         )}
@@ -833,27 +813,23 @@ export function LobbiesView({
                         );
                       })}
                     </div>
-
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Board: {themeMeta.name}
-                    </p>
                   </div>
 
-                  <div className="px-5 py-3.5 bg-slate-50 dark:bg-[#08132B] flex items-center justify-between gap-3 border-t border-slate-100 dark:border-[#1B2E54]">
+                  <div className="px-5 py-3 bg-slate-50 dark:bg-[#08132B] flex items-center justify-between gap-3 border-t border-slate-100 dark:border-[#1B2E54]">
                     <span
                       className={`text-xs font-semibold ${
                         lobby.status === 'waiting'
                           ? 'text-emerald-600 dark:text-emerald-400'
                           : lobby.status === 'in_progress'
-                          ? 'text-amber-600 dark:text-amber-400'
-                          : 'text-slate-500'
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-slate-500'
                       }`}
                     >
                       {lobby.status === 'waiting'
                         ? 'Open'
                         : lobby.status === 'in_progress'
-                        ? 'In Progress'
-                        : 'Finished'}
+                          ? 'In Progress'
+                          : 'Finished'}
                     </span>
 
                     <button
@@ -867,7 +843,7 @@ export function LobbiesView({
                       }}
                       className="px-4 py-2 text-xs font-bold rounded-lg bg-slate-900 dark:bg-amber-500 hover:bg-slate-800 dark:hover:bg-amber-400 text-white dark:text-slate-950 transition-colors whitespace-nowrap min-h-[38px] cursor-pointer"
                     >
-                      {isFull && lobby.allowSpectators ? 'Spectate' : 'Join Table'}
+                      {isFull ? 'Watch' : 'Join Room'}
                     </button>
                   </div>
                 </article>
@@ -890,10 +866,10 @@ export function LobbiesView({
             className="max-w-sm w-full rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-6 space-y-4"
           >
             <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
-              Enter Private Access Code
+              Enter Room Access Code
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Table: {privateJoinTarget.name}
+              Room: {privateJoinTarget.name}
             </p>
             <input
               type="text"
@@ -915,23 +891,23 @@ export function LobbiesView({
                 type="submit"
                 className="px-4 py-2 text-sm font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer"
               >
-                Join Table
+                Join Room
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Create Custom 2-6 Player Ludo Table Modal */}
+      {/* Streamlined Create Online Room Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <form
             onSubmit={handleCreateSubmit}
-            className="max-w-xl w-full rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-6 space-y-5 my-8"
+            className="max-w-md w-full rounded-2xl border border-slate-200 dark:border-[#1B2E54] bg-white dark:bg-[#0D1A35] p-6 space-y-5 my-8"
           >
             <div className="flex items-center justify-between">
               <h2 className="font-display text-xl font-bold text-slate-900 dark:text-white">
-                Create Ludo Table
+                Create Online Room
               </h2>
               <button
                 type="button"
@@ -944,150 +920,77 @@ export function LobbiesView({
 
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Table Name
+                Room Name
               </label>
               <input
                 type="text"
                 value={roomName}
                 onChange={(e) => setRoomName(e.target.value)}
                 maxLength={48}
-                placeholder={`${displayName}'s Royal Table`}
+                placeholder={`${displayName}'s Ludo Room`}
                 className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-300 dark:border-[#243A68] bg-slate-50 dark:bg-[#071126] text-slate-900 dark:text-white min-h-[42px]"
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
-                Players (Up to 6)
+                Players (2–6)
               </label>
               <div className="grid grid-cols-5 gap-2">
-                {([
-                  { count: 2 as const, desc: '1v1' },
-                  { count: 3 as const, desc: '3-Way' },
-                  { count: 4 as const, desc: 'Classic' },
-                  { count: 5 as const, desc: '5-Star' },
-                  { count: 6 as const, desc: 'Hex' },
-                ]).map((opt) => (
+                {([2, 3, 4, 5, 6] as const).map((count) => (
                   <button
-                    key={opt.count}
+                    key={count}
                     type="button"
-                    onClick={() => setMaxPlayers(opt.count)}
-                    className={`p-2.5 rounded-xl border text-center transition-colors cursor-pointer min-h-[56px] ${
-                      maxPlayers === opt.count
+                    onClick={() => setMaxPlayers(count)}
+                    className={`py-2.5 rounded-xl border text-center font-bold text-sm transition-colors cursor-pointer ${
+                      maxPlayers === count
                         ? 'border-amber-500 bg-amber-500/15 text-slate-900 dark:text-amber-300'
                         : 'border-slate-200 dark:border-[#1B2E54] text-slate-600 dark:text-slate-400 hover:border-slate-400'
                     }`}
                   >
-                    <p className="text-sm font-bold">{opt.count}P</p>
-                    <p className="text-[11px] opacity-80">{opt.desc}</p>
+                    {count}P
                   </button>
                 ))}
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
-                3D Box Finish
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                Turn Timer
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {(Object.keys(BOARD_THEME_LABELS) as MapTheme[]).map((themeId) => {
-                  const meta = BOARD_THEME_LABELS[themeId];
-                  return (
-                    <button
-                      key={themeId}
-                      type="button"
-                      onClick={() => setMapTheme(themeId)}
-                      className={`rounded-xl border overflow-hidden text-left transition-all cursor-pointer ${
-                        mapTheme === themeId
-                          ? 'border-amber-500 ring-2 ring-amber-500/30'
-                          : 'border-slate-200 dark:border-[#1B2E54] opacity-85 hover:opacity-100'
-                      }`}
-                    >
-                      <div className={`h-10 bg-gradient-to-r ${meta.swatch}`} />
-                      <p className="p-2.5 text-xs font-semibold text-slate-900 dark:text-white truncate">
-                        {meta.name}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
+              <select
+                value={turnTimeSec}
+                onChange={(e) => setTurnTimeSec(Number(e.target.value) as 10 | 15 | 30)}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-[#243A68] bg-slate-50 dark:bg-[#071126] text-slate-900 dark:text-white min-h-[40px]"
+              >
+                <option value={10}>10s Fast</option>
+                <option value={15}>15s Standard</option>
+                <option value={30}>30s Relaxed</option>
+              </select>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                  Turn Timer
-                </label>
-                <select
-                  value={turnTimeSec}
-                  onChange={(e) => setTurnTimeSec(Number(e.target.value) as 10 | 15 | 30)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-[#243A68] bg-slate-50 dark:bg-[#071126] text-slate-900 dark:text-white min-h-[40px]"
-                >
-                  <option value={10}>10s Blitz</option>
-                  <option value={15}>15s Standard</option>
-                  <option value={30}>30s Tactical</option>
-                </select>
-              </div>
-              <div className="flex flex-col justify-end gap-2">
-                <label
-                  className={`inline-flex items-center gap-2 text-sm ${
-                    !isSignedIn || soloPractice
-                      ? 'text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                      : 'text-slate-700 dark:text-slate-300 cursor-pointer'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSignedIn && !soloPractice && isRanked}
-                    disabled={!isSignedIn || soloPractice}
-                    onChange={(e) => setIsRanked(e.target.checked)}
-                  />
-                  <span>
-                    Ranked ELO {!isSignedIn ? '(Sign in required)' : ''}
-                  </span>
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={allowSpectators}
-                    onChange={(e) => setAllowSpectators(e.target.checked)}
-                  />
-                  <span>Allow Spectators</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-200 dark:border-[#1B2E54]">
+            <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-[#1B2E54]">
               <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={isPrivate}
                   onChange={(e) => setIsPrivate(e.target.checked)}
                 />
-                <span>Private (Access Code)</span>
+                <span>Private Room (Access Code)</span>
               </label>
 
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+              {isPrivate && (
                 <input
-                  type="checkbox"
-                  checked={soloPractice}
-                  onChange={(e) => setSoloPractice(e.target.checked)}
+                  type="text"
+                  required
+                  maxLength={16}
+                  value={accessCode}
+                  onChange={(e) => setAccessCode(e.target.value)}
+                  placeholder="Enter access code..."
+                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-300 dark:border-[#243A68] bg-slate-50 dark:bg-[#071126] text-slate-900 dark:text-white min-h-[40px]"
                 />
-                <span>Fill Empty Seats with CPU</span>
-              </label>
+              )}
             </div>
-
-            {isPrivate && (
-              <input
-                type="text"
-                required
-                maxLength={16}
-                value={accessCode}
-                onChange={(e) => setAccessCode(e.target.value)}
-                placeholder="Set room access code..."
-                className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-300 dark:border-[#243A68] bg-slate-50 dark:bg-[#071126] text-slate-900 dark:text-white min-h-[40px]"
-              />
-            )}
 
             <div className="flex justify-end gap-3 pt-2">
               <button
@@ -1101,7 +1004,7 @@ export function LobbiesView({
                 type="submit"
                 className="px-5 py-2 text-sm font-bold rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 transition-all min-h-[42px] cursor-pointer"
               >
-                Launch Ludo Table
+                Open Room
               </button>
             </div>
           </form>

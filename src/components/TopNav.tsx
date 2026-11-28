@@ -1,6 +1,6 @@
 import { Crown } from 'lucide-react';
 
-export type NavSection = 'lobbies' | 'matchmaking' | 'leaderboard' | 'dashboard';
+export type NavSection = 'lobbies' | 'leaderboard' | 'dashboard';
 
 interface TopNavProps {
   activeSection: NavSection;
@@ -10,7 +10,6 @@ interface TopNavProps {
 
 const NAV_ITEMS: { id: NavSection; label: string; mobileLabel: string }[] = [
   { id: 'lobbies', label: 'Play Ludo', mobileLabel: 'Play' },
-  { id: 'matchmaking', label: 'Quick Match', mobileLabel: 'Queue' },
   { id: 'leaderboard', label: 'Leaderboard', mobileLabel: 'Ranks' },
   { id: 'dashboard', label: 'Profile', mobileLabel: 'Profile' },
 ];
@@ -39,7 +38,7 @@ export function TopNav({
 
           <nav
             aria-label="Primary navigation"
-            className="hidden md:flex items-center gap-7 text-sm font-medium"
+            className="hidden md:flex items-center gap-8 text-sm font-medium"
           >
             {NAV_ITEMS.map((item) => {
               const active = activeSection === item.id;
@@ -72,18 +71,18 @@ export function TopNav({
               onClick={onPrimaryAction}
               className="px-4 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-sm transition-all whitespace-nowrap shrink-0 min-h-[40px] cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
             >
-              New Table
+              New Room
             </button>
           </div>
         </div>
       </header>
 
-      {/* Mobile Cross-Platform Bottom Thumb Navigation */}
+      {/* Mobile Bottom Navigation */}
       <nav
         aria-label="Mobile navigation"
         className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-200 dark:border-[#1B2E54] bg-white/95 dark:bg-[#071126]/95 backdrop-blur-sm"
       >
-        <div className="grid grid-cols-4 h-14">
+        <div className="grid grid-cols-3 h-14">
           {NAV_ITEMS.map((item) => {
             const active = activeSection === item.id;
             return (

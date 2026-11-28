@@ -31,7 +31,7 @@ const firebaseConfig: FirebaseAppletConfig = JSON.parse(
 );
 const FIREBASE_PROJECT_ID = firebaseConfig.projectId;
 
-// --- Cryptographic Firebase ID Token Verification (Zero-IAM) ---
+// --- Cryptographic Firebase ID Token Verification ---
 let cachedCerts: Record<string, string> = {};
 let certsExpireAt = 0;
 
@@ -105,12 +105,12 @@ async function verifyFirebaseIdToken(token: string): Promise<{ uid: string; emai
   return { uid: payload.sub, email: payload.email };
 }
 
-// --- Ludo Board Constants (4-Arm 2-4P & 6-Arm 5-6P) ---
+// --- Ludo Board Constants (Matches Blue TL, Red TR, Green BR, Yellow BL) ---
 const COLOR_START_OFFSET: Record<LudoColor, number> = {
-  red: 0,
-  green: 13,
-  yellow: 26,
-  blue: 39,
+  blue: 0,
+  red: 13,
+  green: 26,
+  yellow: 39,
   purple: 52,
   cyan: 65,
 };
@@ -124,14 +124,16 @@ function getBoardArmCount(maxPlayers: number): 4 | 6 {
 
 function getLudoColorForSlot(slot: LudoSlot, maxPlayers: 2 | 3 | 4 | 5 | 6): LudoColor {
   if (maxPlayers === 2) {
-    return slot === 1 ? 'red' : 'yellow';
+    // Diagonal: Blue (Top-Left) vs Green (Bottom-Right)
+    return slot === 1 ? 'blue' : 'green';
   }
   if (maxPlayers <= 4) {
-    const order4: LudoColor[] = ['red', 'green', 'yellow', 'blue'];
-    return order4[slot - 1] || 'red';
+    // Clockwise matching Ludo King reference: Blue TL -> Red TR -> Green BR -> Yellow BL
+    const order4: LudoColor[] = ['blue', 'red', 'green', 'yellow'];
+    return order4[slot - 1] || 'blue';
   }
-  const order6: LudoColor[] = ['red', 'green', 'yellow', 'blue', 'purple', 'cyan'];
-  return order6[slot - 1] || 'red';
+  const order6: LudoColor[] = ['blue', 'red', 'green', 'yellow', 'purple', 'cyan'];
+  return order6[slot - 1] || 'blue';
 }
 
 function getTrackParams(armCount: 4 | 6) {
@@ -151,7 +153,7 @@ function getGlobalTrackIndex(color: LudoColor, progress: number, armCount: 4 | 6
 // --- Server-Authoritative State ---
 interface ClientSession {
   ws: WebSocket;
-  uid: string | null;
+  uid: string;
   isGuest: boolean;
   username: string;
   avatar: string;
@@ -168,22 +170,8 @@ interface ServerLobby extends LobbyDetail {
   autoPassTimer?: NodeJS.Timeout;
 }
 
-interface QueueEntry {
-  uid: string;
-  isGuest: boolean;
-  username: string;
-  avatar: string;
-  rating: number;
-  mapTheme: MapTheme;
-  maxPlayers: 2 | 4 | 6;
-  isRanked: boolean;
-  joinedAt: number;
-}
-
 const sessions = new Map<WebSocket, ClientSession>();
 const lobbies = new Map<string, ServerLobby>();
-const loungeMessages: ChatMessage[] = [];
-const matchmakingQueue: QueueEntry[] = [];
 
 function sanitizeStr(input: unknown, maxLen: number): string {
   if (typeof input !== 'string') return '';
@@ -228,6 +216,7 @@ function toLobbySummary(lobby: ServerLobby): LobbySummary {
     isPrivate: lobby.isPrivate,
     allowSpectators: lobby.allowSpectators,
     soloPractice: lobby.soloPractice,
+    isLocalPassPlay: lobby.isLocalPassPlay,
     status: lobby.status,
     players: lobby.players,
     spectatorCount: lobby.spectators.length,
@@ -247,6 +236,7 @@ function toLobbyDetail(lobby: ServerLobby): LobbyDetail {
 
 function broadcastLobbyList() {
   const list = Array.from(lobbies.values())
+    .filter((l) => !l.soloPractice && !l.isLocalPassPlay)
     .sort((a, b) => b.createdAt - a.createdAt)
     .map(toLobbySummary);
   broadcastAll('lobby:list', list);
@@ -255,12 +245,9 @@ function broadcastLobbyList() {
 function broadcastPresence() {
   const map = new Map<string, OnlinePlayer>();
   for (const s of sessions.values()) {
-    if (!s.uid) continue;
-    const inQueue = matchmakingQueue.some((q) => q.uid === s.uid);
     const lobby = s.lobbyId ? lobbies.get(s.lobbyId) : undefined;
     let status: OnlinePlayer['status'] = 'idle';
-    if (inQueue) status = 'queuing';
-    else if (lobby?.status === 'in_progress') status = 'in_match';
+    if (lobby?.status === 'in_progress') status = 'in_match';
     else if (lobby) status = 'in_lobby';
 
     map.set(s.uid, {
@@ -284,7 +271,7 @@ function broadcastLobbyDetail(lobby: ServerLobby) {
     ...lobby.spectators.map((s) => s.uid),
   ]);
   for (const [ws, session] of sessions.entries()) {
-    if (session.uid && (memberIds.has(session.uid) || session.lobbyId === lobby.id)) {
+    if (memberIds.has(session.uid) || session.lobbyId === lobby.id) {
       sendJson(ws, 'lobby:state', detail);
     }
   }
@@ -347,11 +334,13 @@ function createInitialLudoState(lobby: ServerLobby): LudoGameState {
     turnSlot: players[0]?.slot ?? 1,
     phase: 'roll',
     diceValue: null,
+    rollSeq: 0,
+    lastRoll: null,
     consecutiveSixes: 0,
     movableTokenIndices: [],
     scores: players.map(() => 0),
     turnDeadline: Date.now() + lobby.turnTimeSec * 1000,
-    lastActionText: `${lobby.players[0]?.username || 'Red'}'s turn to roll.`,
+    lastActionText: `${lobby.players[0]?.username || 'Player 1'}'s turn to roll.`,
   };
 }
 
@@ -401,7 +390,7 @@ function finishLudoMatch(lobby: ServerLobby, winnerSlot: LudoSlot) {
   const avgRating =
     lobby.players.reduce((acc, p) => acc + p.rating, 0) / Math.max(1, lobby.players.length);
 
-  const rankedEligible = lobby.isRanked && !hasCpu && !hasGuest;
+  const rankedEligible = lobby.isRanked && !hasCpu && !hasGuest && !lobby.isLocalPassPlay;
   const ratingDeltas = lobby.players.map((p) => {
     if (!rankedEligible) return 0;
     if (p.slot === winnerSlot) {
@@ -435,7 +424,7 @@ function finishLudoMatch(lobby: ServerLobby, winnerSlot: LudoSlot) {
   };
 
   lobby.lastOutcome = outcome;
-  appendSystemChat(lobby, `${outcome.winnerName} got all 4 tokens home and won Ludo!`);
+  appendSystemChat(lobby, `${outcome.winnerName} got all 4 pawns home and won!`);
   broadcastLobbyDetail(lobby);
   broadcastLobbyList();
   broadcastPresence();
@@ -444,7 +433,7 @@ function finishLudoMatch(lobby: ServerLobby, winnerSlot: LudoSlot) {
 function scheduleLudoTurn(lobby: ServerLobby) {
   clearLobbyTimers(lobby);
   const state = lobby.gameState;
-  if (lobby.status !== 'in_progress' || !state) return;
+  if (lobby.status !== 'in_progress' || !state || state.phase === 'passing') return;
 
   const activeLobbyPlayer = lobby.players.find((p) => p.slot === state.turnSlot);
   if (!activeLobbyPlayer) return;
@@ -453,23 +442,27 @@ function scheduleLudoTurn(lobby: ServerLobby) {
     if (lobby.status !== 'in_progress' || !lobby.gameState) return;
     if (lobby.gameState.phase === 'roll') {
       handleRollDice(lobby, activeLobbyPlayer.slot);
-    } else if (lobby.gameState.movableTokenIndices.length > 0) {
+    } else if (
+      lobby.gameState.phase === 'move' &&
+      lobby.gameState.movableTokenIndices.length > 0
+    ) {
       handleMoveToken(lobby, activeLobbyPlayer.slot, lobby.gameState.movableTokenIndices[0]);
     }
   }, Math.max(1000, state.turnDeadline - Date.now()));
 
   if (activeLobbyPlayer.isCpu) {
+    const delayMs = state.phase === 'roll' ? 650 : 800;
     lobby.cpuTimer = setTimeout(() => {
       if (lobby.status !== 'in_progress' || !lobby.gameState) return;
       if (lobby.gameState.phase === 'roll') {
         handleRollDice(lobby, activeLobbyPlayer.slot);
-      } else {
+      } else if (lobby.gameState.phase === 'move') {
         const bestToken = pickBestCpuToken(lobby.gameState, activeLobbyPlayer.slot);
         if (bestToken !== null) {
           handleMoveToken(lobby, activeLobbyPlayer.slot, bestToken);
         }
       }
-    }, 650);
+    }, delayMs);
   }
 }
 
@@ -486,7 +479,7 @@ function pickBestCpuToken(state: LudoGameState, slot: LudoSlot): number | null {
     const cur = pl.tokens[idx];
     const next = cur === -1 ? 0 : cur + dice;
     let score = next;
-    if (cur === -1) score += 40;
+    if (cur === -1) score += 45;
     if (next === goalPos) score += 120;
     if (next <= maxOuter) {
       const targetGlobal = getGlobalTrackIndex(pl.color, next, state.armCount);
@@ -511,6 +504,23 @@ function pickBestCpuToken(state: LudoGameState, slot: LudoSlot): number | null {
   return bestIdx;
 }
 
+function queueAutoPass(lobby: ServerLobby, currentSlot: LudoSlot, resetSixes: boolean) {
+  lobby.autoPassTimer = setTimeout(() => {
+    if (lobby.status !== 'in_progress' || !lobby.gameState) return;
+    const nextSlot = getNextTurnSlot(lobby, currentSlot);
+    const nextPlayer = lobby.players.find((p) => p.slot === nextSlot);
+    lobby.gameState.turnSlot = nextSlot;
+    lobby.gameState.phase = 'roll';
+    lobby.gameState.diceValue = null;
+    if (resetSixes) lobby.gameState.consecutiveSixes = 0;
+    lobby.gameState.movableTokenIndices = [];
+    lobby.gameState.turnDeadline = Date.now() + lobby.turnTimeSec * 1000;
+    lobby.gameState.lastActionText = `${nextPlayer?.username || 'Next player'}'s turn to roll.`;
+    broadcastLobbyDetail(lobby);
+    scheduleLudoTurn(lobby);
+  }, 850);
+}
+
 function handleRollDice(lobby: ServerLobby, slot: LudoSlot): boolean {
   const state = lobby.gameState;
   if (!state || lobby.status !== 'in_progress') return false;
@@ -523,18 +533,17 @@ function handleRollDice(lobby: ServerLobby, slot: LudoSlot): boolean {
   clearLobbyTimers(lobby);
   const roll = crypto.randomInt(1, 7);
   state.diceValue = roll;
+  state.rollSeq += 1;
+  state.lastRoll = { slot, value: roll, seq: state.rollSeq };
 
   const nextSixes = roll === 6 ? state.consecutiveSixes + 1 : 0;
   if (nextSixes >= 3) {
     state.consecutiveSixes = 0;
     state.movableTokenIndices = [];
-    state.lastActionText = `${lobbyPlayer.username} rolled three 6s in a row — turn skipped.`;
-    const nextSlot = getNextTurnSlot(lobby, slot);
-    state.turnSlot = nextSlot;
-    state.phase = 'roll';
-    state.turnDeadline = Date.now() + lobby.turnTimeSec * 1000;
+    state.phase = 'passing';
+    state.lastActionText = `${lobbyPlayer.username} rolled three 6s — turn skipped.`;
     broadcastLobbyDetail(lobby);
-    scheduleLudoTurn(lobby);
+    queueAutoPass(lobby, slot, true);
     return true;
   }
 
@@ -543,21 +552,10 @@ function handleRollDice(lobby: ServerLobby, slot: LudoSlot): boolean {
   state.movableTokenIndices = movable;
 
   if (movable.length === 0) {
+    state.phase = 'passing';
     state.lastActionText = `${lobbyPlayer.username} rolled ${roll} — no legal moves.`;
     broadcastLobbyDetail(lobby);
-    lobby.autoPassTimer = setTimeout(() => {
-      if (lobby.status !== 'in_progress' || !lobby.gameState) return;
-      const nextSlot = getNextTurnSlot(lobby, slot);
-      const nextPlayer = lobby.players.find((p) => p.slot === nextSlot);
-      lobby.gameState.turnSlot = nextSlot;
-      lobby.gameState.phase = 'roll';
-      lobby.gameState.consecutiveSixes = 0;
-      lobby.gameState.movableTokenIndices = [];
-      lobby.gameState.turnDeadline = Date.now() + lobby.turnTimeSec * 1000;
-      lobby.gameState.lastActionText = `${nextPlayer?.username || 'Next player'}'s turn to roll.`;
-      broadcastLobbyDetail(lobby);
-      scheduleLudoTurn(lobby);
-    }, 900);
+    queueAutoPass(lobby, slot, true);
     return true;
   }
 
@@ -609,9 +607,10 @@ function handleMoveToken(lobby: ServerLobby, slot: LudoSlot, tokenIndex: number)
   playerState.finishedCount = playerState.tokens.filter((t) => t === goalPos).length;
   state.scores = computeLudoScores(state);
   state.movableTokenIndices = [];
+  state.diceValue = null;
 
   if (playerState.finishedCount === 4) {
-    state.lastActionText = `${lobbyPlayer.username} got all 4 tokens home!`;
+    state.lastActionText = `${lobbyPlayer.username} got all 4 pawns home!`;
     finishLudoMatch(lobby, slot);
     return true;
   }
@@ -623,10 +622,10 @@ function handleMoveToken(lobby: ServerLobby, slot: LudoSlot, tokenIndex: number)
     state.phase = 'roll';
     state.turnDeadline = Date.now() + lobby.turnTimeSec * 1000;
     const reason = capturedSomeone
-      ? 'captured an opponent'
+      ? 'captured a pawn'
       : reachedGoal
-      ? 'reached Home'
-      : 'rolled a 6';
+        ? 'reached Home'
+        : 'rolled a 6';
     state.lastActionText = `${lobbyPlayer.username} ${reason} — bonus roll!`;
   } else {
     const nextSlot = getNextTurnSlot(lobby, slot);
@@ -651,7 +650,7 @@ function startLobbyMatch(lobby: ServerLobby) {
   lobby.startedAt = Date.now();
   lobby.lastOutcome = null;
   lobby.gameState = createInitialLudoState(lobby);
-  appendSystemChat(lobby, `Match started (${lobby.players.length} players · ${lobby.mapTheme}).`);
+  appendSystemChat(lobby, `Ludo match started (${lobby.players.length} players).`);
   broadcastLobbyDetail(lobby);
   broadcastLobbyList();
   broadcastPresence();
@@ -666,7 +665,7 @@ function removeUserFromLobby(uid: string, lobbyId: string) {
   lobby.players = lobby.players.filter((p) => p.uid !== uid);
   lobby.spectators = lobby.spectators.filter((s) => s.uid !== uid);
 
-  const humanPlayers = lobby.players.filter((p) => !p.isCpu);
+  const humanPlayers = lobby.players.filter((p) => !p.isCpu && !p.uid.startsWith('local-seat-'));
   if (humanPlayers.length === 0) {
     clearLobbyTimers(lobby);
     lobbies.delete(lobby.id);
@@ -681,7 +680,7 @@ function removeUserFromLobby(uid: string, lobbyId: string) {
   }
 
   if (wasPlayer && lobby.status === 'in_progress') {
-    if (humanPlayers.length === 1) {
+    if (humanPlayers.length === 1 && !lobby.soloPractice && !lobby.isLocalPassPlay) {
       finishLudoMatch(lobby, humanPlayers[0].slot);
     } else {
       if (lobby.gameState) {
@@ -691,6 +690,7 @@ function removeUserFromLobby(uid: string, lobbyId: string) {
         if (!lobby.players.some((lp) => lp.slot === lobby.gameState!.turnSlot)) {
           lobby.gameState.turnSlot = lobby.players[0].slot;
           lobby.gameState.phase = 'roll';
+          lobby.gameState.diceValue = null;
         }
       }
       broadcastLobbyDetail(lobby);
@@ -702,101 +702,6 @@ function removeUserFromLobby(uid: string, lobbyId: string) {
     }
     broadcastLobbyDetail(lobby);
     broadcastLobbyList();
-  }
-}
-
-function tryPairMatchmaking() {
-  for (let i = 0; i < matchmakingQueue.length; i++) {
-    const anchor = matchmakingQueue[i];
-    const compatible = [anchor];
-    for (let j = 0; j < matchmakingQueue.length; j++) {
-      if (i === j) continue;
-      const cand = matchmakingQueue[j];
-      if (cand.uid === anchor.uid) continue;
-      if (cand.maxPlayers === anchor.maxPlayers && cand.isRanked === anchor.isRanked) {
-        compatible.push(cand);
-        if (compatible.length === anchor.maxPlayers) break;
-      }
-    }
-
-    if (compatible.length === anchor.maxPlayers) {
-      const matchedIds = new Set(compatible.map((c) => c.uid));
-      for (let k = matchmakingQueue.length - 1; k >= 0; k--) {
-        if (matchedIds.has(matchmakingQueue[k].uid)) {
-          matchmakingQueue.splice(k, 1);
-        }
-      }
-
-      const lobbyId = `mm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const players: LobbyPlayer[] = compatible.map((c, idx) => {
-        const slot = (idx + 1) as LudoSlot;
-        return {
-          uid: c.uid,
-          username: c.username,
-          avatar: c.avatar,
-          rating: c.rating,
-          ready: true,
-          slot,
-          ludoColor: getLudoColorForSlot(slot, anchor.maxPlayers),
-          isGuest: c.isGuest,
-        };
-      });
-
-      const lobby: ServerLobby = {
-        id: lobbyId,
-        name: `${anchor.maxPlayers}P Ludo Match`,
-        hostId: anchor.uid,
-        hostName: anchor.username,
-        gameMode: 'Ludo',
-        mapTheme: anchor.mapTheme,
-        maxPlayers: anchor.maxPlayers,
-        turnTimeSec: 15,
-        isRanked: anchor.isRanked && compatible.every((c) => !c.isGuest),
-        isPrivate: false,
-        accessCode: '',
-        allowSpectators: true,
-        soloPractice: false,
-        status: 'waiting',
-        players,
-        spectators: [],
-        spectatorCount: 0,
-        chatMessages: [],
-        gameState: null,
-        lastOutcome: null,
-        createdAt: Date.now(),
-        startedAt: null,
-      };
-      lobbies.set(lobbyId, lobby);
-
-      for (const [ws, s] of sessions.entries()) {
-        if (s.uid && matchedIds.has(s.uid)) {
-          if (s.lobbyId && s.lobbyId !== lobbyId) {
-            removeUserFromLobby(s.uid, s.lobbyId);
-          }
-          s.lobbyId = lobbyId;
-          sendJson(ws, 'matchmaking:found', { lobbyId, gameMode: 'Ludo' });
-        }
-      }
-
-      startLobbyMatch(lobby);
-      broadcastQueueCount();
-      return;
-    }
-  }
-}
-
-function broadcastQueueCount() {
-  for (const [ws, s] of sessions.entries()) {
-    const entry = s.uid ? matchmakingQueue.find((q) => q.uid === s.uid) : undefined;
-    sendJson(ws, 'matchmaking:status', {
-      inQueue: Boolean(entry),
-      gameMode: 'Ludo',
-      mapTheme: entry?.mapTheme ?? 'Obsidian Grid',
-      maxPlayers: entry?.maxPlayers ?? 2,
-      isRanked: entry?.isRanked ?? false,
-      joinedAt: entry?.joinedAt ?? null,
-      queueSize: matchmakingQueue.length,
-    });
   }
 }
 
@@ -813,25 +718,33 @@ async function main() {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
   wss.on('connection', (ws) => {
-    sessions.set(ws, {
+    const guestSuffix = crypto.randomBytes(4).toString('hex');
+    const guestUid = `guest-${guestSuffix}`;
+    const initialSession: ClientSession = {
       ws,
-      uid: null,
+      uid: guestUid,
       isGuest: true,
-      username: 'Guest',
+      username: `Guest${guestSuffix.slice(0, 4).toUpperCase()}`,
       avatar: 'emblem-slate',
       rating: 1200,
-      platform: 'Desktop',
+      platform: 'Cross-Play',
       lobbyId: null,
-    });
+    };
+    sessions.set(ws, initialSession);
 
+    sendJson(ws, 'auth:ok', {
+      uid: initialSession.uid,
+      isGuest: true,
+      username: initialSession.username,
+    });
     sendJson(
       ws,
       'lobby:list',
       Array.from(lobbies.values())
+        .filter((l) => !l.soloPractice && !l.isLocalPassPlay)
         .sort((a, b) => b.createdAt - a.createdAt)
         .map(toLobbySummary)
     );
-    sendJson(ws, 'lounge:history', loungeMessages.slice(-40));
     broadcastPresence();
 
     ws.on('message', async (rawData) => {
@@ -846,55 +759,40 @@ async function main() {
       if (!session || !msg.type) return;
       const p = msg.payload || {};
 
-      // Server-generated Guest Session (Play Without Login)
+      // Guest Session (Play Without Login)
       if (msg.type === 'auth:guest') {
-        if (!session.uid || !session.isGuest) {
-          if (session.uid && session.lobbyId) {
+        if (!session.isGuest) {
+          if (session.lobbyId) {
             removeUserFromLobby(session.uid, session.lobbyId);
             session.lobbyId = null;
           }
-          const guestSuffix = crypto.randomBytes(4).toString('hex');
-          session.uid = `guest-${guestSuffix}`;
+          const nextSuffix = crypto.randomBytes(4).toString('hex');
+          session.uid = `guest-${nextSuffix}`;
         }
         session.isGuest = true;
         const requestedName = sanitizeStr(p.username, 24);
-        session.username = requestedName || `Guest-${session.uid.slice(-4).toUpperCase()}`;
+        session.username = requestedName || session.username;
         session.avatar = 'emblem-slate';
         session.rating = 1200;
-        session.platform =
-          p.platform === 'Mobile' || p.platform === 'Cross-Play' ? p.platform : 'Desktop';
+        session.platform = 'Cross-Play';
         sendJson(ws, 'auth:ok', {
           uid: session.uid,
           isGuest: true,
           username: session.username,
         });
         broadcastPresence();
-        broadcastQueueCount();
         return;
       }
 
       // Firebase ID Token Auth (Registered Player)
       if (msg.type === 'auth') {
         const token = typeof p.token === 'string' ? p.token : '';
-        if (!token) {
-          if (session.uid && session.lobbyId) {
-            removeUserFromLobby(session.uid, session.lobbyId);
-            session.lobbyId = null;
-          }
-          session.uid = null;
-          session.isGuest = true;
-          broadcastPresence();
-          return;
-        }
+        if (!token) return;
         try {
           const verified = await verifyFirebaseIdToken(token);
-          if (session.uid && session.uid !== verified.uid) {
-            const qIdx = matchmakingQueue.findIndex((q) => q.uid === session.uid);
-            if (qIdx >= 0) matchmakingQueue.splice(qIdx, 1);
-            if (session.lobbyId) {
-              removeUserFromLobby(session.uid, session.lobbyId);
-              session.lobbyId = null;
-            }
+          if (session.uid !== verified.uid && session.lobbyId) {
+            removeUserFromLobby(session.uid, session.lobbyId);
+            session.lobbyId = null;
           }
           session.uid = verified.uid;
           session.isGuest = false;
@@ -902,35 +800,26 @@ async function main() {
           session.avatar = sanitizeStr(p.avatar, 512) || 'emblem-cobalt';
           session.rating = typeof p.rating === 'number' ? Math.round(p.rating) : 1200;
           session.platform =
-            p.platform === 'Mobile' || p.platform === 'Cross-Play' ? p.platform : 'Desktop';
+            p.platform === 'Mobile' || p.platform === 'Desktop' ? p.platform : 'Cross-Play';
           sendJson(ws, 'auth:ok', {
             uid: session.uid,
             isGuest: false,
             username: session.username,
           });
           broadcastPresence();
-          broadcastQueueCount();
         } catch (err) {
           sendJson(ws, 'error', { message: err instanceof Error ? err.message : 'Auth rejected' });
         }
         return;
       }
 
-      if (msg.type === 'profile:sync' && session.uid) {
+      if (msg.type === 'profile:sync') {
         session.username = sanitizeStr(p.username, 24) || session.username;
         if (!session.isGuest) {
           session.avatar = sanitizeStr(p.avatar, 512) || session.avatar;
           if (typeof p.rating === 'number') session.rating = Math.round(p.rating);
         }
-        if (p.platform === 'Mobile' || p.platform === 'Desktop' || p.platform === 'Cross-Play') {
-          session.platform = p.platform;
-        }
         broadcastPresence();
-        return;
-      }
-
-      if (!session.uid) {
-        sendJson(ws, 'error', { message: 'Connecting session — please try again.' });
         return;
       }
 
@@ -949,7 +838,9 @@ async function main() {
           rawMax === 3 || rawMax === 4 || rawMax === 5 || rawMax === 6 ? rawMax : 2;
         const turnTimeSec = p.turnTimeSec === 10 || p.turnTimeSec === 30 ? p.turnTimeSec : 15;
         const soloPractice = Boolean(p.soloPractice);
-        const isPrivate = Boolean(p.isPrivate);
+        const isLocalPassPlay = !soloPractice && Boolean(p.isLocalPassPlay);
+        const autoStart = soloPractice || isLocalPassPlay || Boolean(p.autoStart);
+        const isPrivate = !soloPractice && !isLocalPassPlay && Boolean(p.isPrivate);
         const accessCode = isPrivate ? sanitizeStr(p.accessCode, 16) : '';
         const lobbyId = `room-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -981,13 +872,28 @@ async function main() {
               isCpu: true,
             });
           }
+        } else if (isLocalPassPlay) {
+          for (let seat = 2; seat <= maxPlayers; seat++) {
+            const slot = seat as LudoSlot;
+            players.push({
+              uid: `local-seat-${seat}`,
+              username: `Player ${seat}`,
+              avatar: 'emblem-amber',
+              rating: 1200,
+              ready: true,
+              slot,
+              ludoColor: getLudoColorForSlot(slot, maxPlayers),
+              isGuest: true,
+            });
+          }
         }
 
-        const isRankedAllowed = !soloPractice && !session.isGuest && Boolean(p.isRanked);
+        const isRankedAllowed =
+          !soloPractice && !isLocalPassPlay && !session.isGuest && Boolean(p.isRanked);
 
         const lobby: ServerLobby = {
           id: lobbyId,
-          name: sanitizeStr(p.name, 48) || `${session.username}'s Ludo Room`,
+          name: sanitizeStr(p.name, 48) || `${session.username}'s Ludo Table`,
           hostId: session.uid,
           hostName: session.username,
           gameMode: 'Ludo',
@@ -999,6 +905,7 @@ async function main() {
           accessCode,
           allowSpectators: p.allowSpectators !== false,
           soloPractice,
+          isLocalPassPlay,
           status: 'waiting',
           players,
           spectators: [],
@@ -1010,12 +917,17 @@ async function main() {
           startedAt: null,
         };
 
-        appendSystemChat(lobby, `${session.username} opened a ${maxPlayers}-player Ludo room.`);
+        appendSystemChat(lobby, `${session.username} opened a ${maxPlayers}-player Ludo table.`);
         lobbies.set(lobbyId, lobby);
         session.lobbyId = lobbyId;
-        sendJson(ws, 'lobby:state', toLobbyDetail(lobby));
-        broadcastLobbyList();
-        broadcastPresence();
+
+        if (autoStart && lobby.players.length >= 2) {
+          startLobbyMatch(lobby);
+        } else {
+          sendJson(ws, 'lobby:state', toLobbyDetail(lobby));
+          broadcastLobbyList();
+          broadcastPresence();
+        }
         return;
       }
 
@@ -1091,9 +1003,6 @@ async function main() {
         if (typeof p.name === 'string' && sanitizeStr(p.name, 48)) {
           lobby.name = sanitizeStr(p.name, 48);
         }
-        if (p.mapTheme === 'Obsidian Grid' || p.mapTheme === 'Alpine Bastion' || p.mapTheme === 'Solaris Circuit') {
-          lobby.mapTheme = p.mapTheme;
-        }
         const rawMax = Number(p.maxPlayers);
         if (rawMax === 2 || rawMax === 3 || rawMax === 4 || rawMax === 5 || rawMax === 6) {
           const humanCount = lobby.players.filter((pl) => !pl.isCpu).length;
@@ -1107,9 +1016,6 @@ async function main() {
         const anyGuest = lobby.players.some((pl) => pl.isGuest);
         if (typeof p.isRanked === 'boolean' && !lobby.soloPractice && !anyGuest) {
           lobby.isRanked = p.isRanked;
-        }
-        if (typeof p.allowSpectators === 'boolean') {
-          lobby.allowSpectators = p.allowSpectators;
         }
         if (typeof p.soloPractice === 'boolean' && lobby.status === 'waiting') {
           lobby.soloPractice = p.soloPractice;
@@ -1134,7 +1040,7 @@ async function main() {
         }
         rebalanceLobbySlots(lobby);
 
-        appendSystemChat(lobby, `Table updated: ${lobby.maxPlayers} Players · ${lobby.mapTheme}.`);
+        appendSystemChat(lobby, `Table updated: ${lobby.maxPlayers} Players.`);
         broadcastLobbyDetail(lobby);
         broadcastLobbyList();
         return;
@@ -1171,7 +1077,14 @@ async function main() {
 
       if (msg.type === 'game:roll' && session.lobbyId) {
         const lobby = lobbies.get(session.lobbyId);
-        if (!lobby || lobby.status !== 'in_progress') return;
+        if (!lobby || lobby.status !== 'in_progress' || !lobby.gameState) return;
+        if (lobby.isLocalPassPlay && lobby.hostId === session.uid) {
+          const activeP = lobby.players.find((pl) => pl.slot === lobby.gameState!.turnSlot);
+          if (activeP && !activeP.isCpu) {
+            handleRollDice(lobby, activeP.slot);
+          }
+          return;
+        }
         const player = lobby.players.find((pl) => pl.uid === session.uid);
         if (!player) return;
         handleRollDice(lobby, player.slot);
@@ -1180,12 +1093,18 @@ async function main() {
 
       if (msg.type === 'game:move' && session.lobbyId) {
         const lobby = lobbies.get(session.lobbyId);
-        if (!lobby || lobby.status !== 'in_progress') return;
+        if (!lobby || lobby.status !== 'in_progress' || !lobby.gameState) return;
+        if (typeof p.tokenIndex !== 'number') return;
+        if (lobby.isLocalPassPlay && lobby.hostId === session.uid) {
+          const activeP = lobby.players.find((pl) => pl.slot === lobby.gameState!.turnSlot);
+          if (activeP && !activeP.isCpu) {
+            handleMoveToken(lobby, activeP.slot, p.tokenIndex);
+          }
+          return;
+        }
         const player = lobby.players.find((pl) => pl.uid === session.uid);
         if (!player) return;
-        if (typeof p.tokenIndex === 'number') {
-          handleMoveToken(lobby, player.slot, p.tokenIndex);
-        }
+        handleMoveToken(lobby, player.slot, p.tokenIndex);
         return;
       }
 
@@ -1203,57 +1122,6 @@ async function main() {
         };
         lobby.chatMessages = [...lobby.chatMessages.slice(-79), chatMsg];
         broadcastLobbyDetail(lobby);
-        return;
-      }
-
-      if (msg.type === 'lounge:send') {
-        const text = sanitizeStr(p.text, 280);
-        if (!text) return;
-        const chatMsg: ChatMessage = {
-          id: `lng-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          senderId: session.uid,
-          senderName: session.username,
-          text,
-          timestamp: Date.now(),
-          channel: 'lounge',
-        };
-        loungeMessages.push(chatMsg);
-        if (loungeMessages.length > 60) loungeMessages.shift();
-        broadcastAll('lounge:message', chatMsg);
-        return;
-      }
-
-      if (msg.type === 'matchmaking:join') {
-        if (matchmakingQueue.some((q) => q.uid === session.uid)) return;
-        const mapTheme: MapTheme =
-          p.mapTheme === 'Alpine Bastion' || p.mapTheme === 'Solaris Circuit'
-            ? p.mapTheme
-            : 'Obsidian Grid';
-        const rawMax = Number(p.maxPlayers);
-        const maxPlayers: 2 | 4 | 6 = rawMax === 4 || rawMax === 6 ? rawMax : 2;
-        const wantRanked = !session.isGuest && p.isRanked !== false;
-        matchmakingQueue.push({
-          uid: session.uid,
-          isGuest: session.isGuest,
-          username: session.username,
-          avatar: session.avatar,
-          rating: session.rating,
-          mapTheme,
-          maxPlayers,
-          isRanked: wantRanked,
-          joinedAt: Date.now(),
-        });
-        broadcastQueueCount();
-        broadcastPresence();
-        tryPairMatchmaking();
-        return;
-      }
-
-      if (msg.type === 'matchmaking:leave') {
-        const idx = matchmakingQueue.findIndex((q) => q.uid === session.uid);
-        if (idx >= 0) matchmakingQueue.splice(idx, 1);
-        broadcastQueueCount();
-        broadcastPresence();
         return;
       }
 
@@ -1280,15 +1148,10 @@ async function main() {
     ws.on('close', () => {
       const session = sessions.get(ws);
       sessions.delete(ws);
-      if (session?.uid) {
+      if (session) {
         const stillConnected = Array.from(sessions.values()).some((s) => s.uid === session.uid);
-        if (!stillConnected) {
-          const qIdx = matchmakingQueue.findIndex((q) => q.uid === session.uid);
-          if (qIdx >= 0) matchmakingQueue.splice(qIdx, 1);
-          if (session.lobbyId) {
-            removeUserFromLobby(session.uid, session.lobbyId);
-          }
-          broadcastQueueCount();
+        if (!stillConnected && session.lobbyId) {
+          removeUserFromLobby(session.uid, session.lobbyId);
         }
         broadcastPresence();
       }

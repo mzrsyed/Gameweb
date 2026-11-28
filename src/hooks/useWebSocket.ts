@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
 import type {
-  ChatMessage,
-  GameMode,
   LobbyDetail,
   LobbySummary,
   MapTheme,
-  MatchmakingStatus,
   OnlinePlayer,
   PlayerProfile,
   RealtimePushEvent,
@@ -19,7 +16,6 @@ interface UseWebSocketOptions {
   guestName: string;
   pushEnabled: boolean;
   onPushEvent?: (evt: RealtimePushEvent) => void;
-  onMatchFound?: (lobbyId: string) => void;
 }
 
 export function useWebSocket({
@@ -28,38 +24,28 @@ export function useWebSocket({
   guestName,
   pushEnabled,
   onPushEvent,
-  onMatchFound,
 }: UseWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
   const onPushRef = useRef(onPushEvent);
-  const onMatchFoundRef = useRef(onMatchFound);
   const pushEnabledRef = useRef(pushEnabled);
+  const userRef = useRef(user);
+  const profileRef = useRef(profile);
   const guestNameRef = useRef(guestName);
 
   onPushRef.current = onPushEvent;
-  onMatchFoundRef.current = onMatchFound;
   pushEnabledRef.current = pushEnabled;
+  userRef.current = user;
+  profileRef.current = profile;
   guestNameRef.current = guestName;
 
   const [connected, setConnected] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
   const [clientUid, setClientUid] = useState<string | null>(null);
   const [isGuestSession, setIsGuestSession] = useState(true);
   const [lobbies, setLobbies] = useState<LobbySummary[]>([]);
   const [activeLobby, setActiveLobby] = useState<LobbyDetail | null>(null);
   const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayer[]>([]);
-  const [loungeMessages, setLoungeMessages] = useState<ChatMessage[]>([]);
-  const [matchmaking, setMatchmaking] = useState<MatchmakingStatus>({
-    inQueue: false,
-    gameMode: 'Ludo',
-    mapTheme: 'Obsidian Grid',
-    maxPlayers: 2,
-    isRanked: false,
-    joinedAt: null,
-    queueSize: 0,
-  });
   const [wsError, setWsError] = useState<string | null>(null);
 
   const sendRaw = useCallback((type: string, payload: Record<string, unknown> = {}) => {
@@ -71,49 +57,46 @@ export function useWebSocket({
     return false;
   }, []);
 
-  const authenticateSocket = useCallback(
-    async (ws: WebSocket) => {
-      if (!user) {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(
-            JSON.stringify({
-              type: 'auth:guest',
-              payload: {
-                username: guestNameRef.current.trim(),
-                platform: 'Cross-Play',
-              },
-            })
-          );
-        }
-        return;
+  const syncAuthOverSocket = useCallback(async (ws: WebSocket) => {
+    const currentUser = userRef.current;
+    const currentProfile = profileRef.current;
+    if (!currentUser) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          JSON.stringify({
+            type: 'auth:guest',
+            payload: { username: guestNameRef.current.trim() },
+          })
+        );
       }
-      try {
-        const token = await user.getIdToken();
-        const avatar =
-          profile?.avatarCode === 'google' && profile.photoUrl
-            ? profile.photoUrl
-            : profile?.avatarCode || 'emblem-cobalt';
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(
-            JSON.stringify({
-              type: 'auth',
-              payload: {
-                token,
-                username: profile?.username || user.displayName || 'Player',
-                avatar,
-                rating: profile?.rating ?? 1200,
-                platform: profile?.preferredPlatform ?? 'Desktop',
-              },
-            })
-          );
-        }
-      } catch {
-        setAuthenticated(false);
+      return;
+    }
+    try {
+      const token = await currentUser.getIdToken();
+      const avatar =
+        currentProfile?.avatarCode === 'google' && currentProfile.photoUrl
+          ? currentProfile.photoUrl
+          : currentProfile?.avatarCode || 'emblem-cobalt';
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          JSON.stringify({
+            type: 'auth',
+            payload: {
+              token,
+              username: currentProfile?.username || currentUser.displayName || 'Player',
+              avatar,
+              rating: currentProfile?.rating ?? 1200,
+              platform: currentProfile?.preferredPlatform ?? 'Cross-Play',
+            },
+          })
+        );
       }
-    },
-    [user, profile?.username, profile?.avatarCode, profile?.photoUrl, profile?.rating, profile?.preferredPlatform]
-  );
+    } catch {
+      // keep existing session if token fetch fails
+    }
+  }, []);
 
+  // Connect WebSocket once on mount; never tear down on profile updates
   useEffect(() => {
     let disposed = false;
 
@@ -132,7 +115,7 @@ export function useWebSocket({
         reconnectAttemptRef.current = 0;
         setConnected(true);
         setWsError(null);
-        void authenticateSocket(ws);
+        void syncAuthOverSocket(ws);
       };
 
       ws.onmessage = (event) => {
@@ -149,7 +132,6 @@ export function useWebSocket({
             const authInfo = msg.payload as { uid: string; isGuest?: boolean };
             setClientUid(authInfo.uid);
             setIsGuestSession(Boolean(authInfo.isGuest));
-            setAuthenticated(true);
             break;
           }
           case 'lobby:list':
@@ -164,37 +146,14 @@ export function useWebSocket({
           case 'presence:list':
             setOnlinePlayers(Array.isArray(msg.payload) ? (msg.payload as OnlinePlayer[]) : []);
             break;
-          case 'lounge:history':
-            if (Array.isArray(msg.payload)) {
-              setLoungeMessages(msg.payload as ChatMessage[]);
-            }
-            break;
-          case 'lounge:message': {
-            const incoming = msg.payload as ChatMessage;
-            setLoungeMessages((prev) => {
-              if (prev.some((m) => m.id === incoming.id)) return prev;
-              return [...prev.slice(-59), incoming];
-            });
-            break;
-          }
-          case 'matchmaking:status':
-            setMatchmaking(msg.payload as MatchmakingStatus);
-            break;
-          case 'matchmaking:found': {
-            const found = msg.payload as { lobbyId: string; gameMode: GameMode };
-            soundFx.matchFound();
-            if (pushEnabledRef.current && 'Notification' in window && Notification.permission === 'granted') {
-              new Notification('Match Found — Ausa Ludo Master', {
-                body: `Joining ${found.gameMode} board now.`,
-              });
-            }
-            onMatchFoundRef.current?.(found.lobbyId);
-            break;
-          }
           case 'push:event': {
             const evt = msg.payload as RealtimePushEvent;
             soundFx.notify();
-            if (pushEnabledRef.current && 'Notification' in window && Notification.permission === 'granted') {
+            if (
+              pushEnabledRef.current &&
+              'Notification' in window &&
+              Notification.permission === 'granted'
+            ) {
               new Notification(evt.title, { body: evt.body });
             }
             onPushRef.current?.(evt);
@@ -210,9 +169,8 @@ export function useWebSocket({
 
       ws.onclose = () => {
         setConnected(false);
-        setAuthenticated(false);
         if (disposed) return;
-        const delay = Math.min(8000, 800 * Math.pow(1.5, reconnectAttemptRef.current));
+        const delay = Math.min(6000, 700 * Math.pow(1.4, reconnectAttemptRef.current));
         reconnectAttemptRef.current += 1;
         reconnectTimerRef.current = window.setTimeout(connect, delay);
       };
@@ -228,16 +186,16 @@ export function useWebSocket({
         wsRef.current = null;
       }
     };
-  }, [authenticateSocket]);
+  }, [syncAuthOverSocket]);
 
-  // Sync auth / profile changes over open socket
+  // Sync auth / profile changes over already-open socket without disconnecting
   useEffect(() => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (user && isGuestSession) {
-      void authenticateSocket(ws);
+      void syncAuthOverSocket(ws);
     } else if (!user && !isGuestSession) {
-      void authenticateSocket(ws);
+      void syncAuthOverSocket(ws);
     } else if (user && profile) {
       const avatar =
         profile.avatarCode === 'google' && profile.photoUrl
@@ -252,10 +210,9 @@ export function useWebSocket({
     } else if (!user && guestName.trim()) {
       sendRaw('profile:sync', {
         username: guestName.trim().slice(0, 24),
-        platform: 'Cross-Play',
       });
     }
-  }, [user, isGuestSession, profile, guestName, authenticateSocket, sendRaw]);
+  }, [user, isGuestSession, profile, guestName, syncAuthOverSocket, sendRaw]);
 
   const actions = {
     createLobby: (config: {
@@ -268,31 +225,32 @@ export function useWebSocket({
       accessCode: string;
       allowSpectators: boolean;
       soloPractice: boolean;
+      isLocalPassPlay?: boolean;
+      autoStart?: boolean;
     }) => sendRaw('lobby:create', { ...config, gameMode: 'Ludo' }),
-    joinLobby: (lobbyId: string, accessCode = '') => sendRaw('lobby:join', { lobbyId, accessCode }),
+    joinLobby: (lobbyId: string, accessCode = '') =>
+      sendRaw('lobby:join', { lobbyId, accessCode }),
     leaveLobby: () => {
       sendRaw('lobby:leave', {});
       setActiveLobby(null);
     },
-    customizeLobby: (updates: Partial<{
-      name: string;
-      mapTheme: MapTheme;
-      maxPlayers: 2 | 3 | 4 | 5 | 6;
-      turnTimeSec: 10 | 15 | 30;
-      isRanked: boolean;
-      allowSpectators: boolean;
-      soloPractice: boolean;
-    }>) => sendRaw('lobby:customize', updates),
+    customizeLobby: (
+      updates: Partial<{
+        name: string;
+        mapTheme: MapTheme;
+        maxPlayers: 2 | 3 | 4 | 5 | 6;
+        turnTimeSec: 10 | 15 | 30;
+        isRanked: boolean;
+        allowSpectators: boolean;
+        soloPractice: boolean;
+      }>
+    ) => sendRaw('lobby:customize', updates),
     toggleReady: (ready: boolean) => sendRaw('lobby:ready', { ready }),
     startMatch: () => sendRaw('lobby:start', {}),
     rematch: () => sendRaw('lobby:rematch', {}),
     rollDice: () => sendRaw('game:roll', {}),
     sendMove: (tokenIndex: number) => sendRaw('game:move', { tokenIndex }),
     sendLobbyChat: (text: string) => sendRaw('chat:send', { text }),
-    sendLoungeChat: (text: string) => sendRaw('lounge:send', { text }),
-    joinMatchmaking: (opts: { mapTheme: MapTheme; maxPlayers: 2 | 4 | 6; isRanked: boolean }) =>
-      sendRaw('matchmaking:join', opts),
-    leaveMatchmaking: () => sendRaw('matchmaking:leave', {}),
     pushMatchInvite: (recipientId: string, lobbyId: string, lobbyName: string) =>
       sendRaw('invite:send', { recipientId, lobbyId, lobbyName }),
     clearError: () => setWsError(null),
@@ -300,14 +258,11 @@ export function useWebSocket({
 
   return {
     connected,
-    authenticated,
     clientUid: user?.uid ?? clientUid,
     isGuestSession,
     lobbies,
     activeLobby,
     onlinePlayers,
-    loungeMessages,
-    matchmaking,
     wsError,
     actions,
   };

@@ -156,9 +156,15 @@ export interface ChatMessage {
 export interface LudoPlayerState {
   slot: LudoSlot;
   color: LudoColor;
-  tokens: [number, number, number, number]; // -1 = yard, 0..maxOuter = outer track, home.. = home col, goal = finished
+  tokens: [number, number, number, number];
   finishedCount: number;
   captures: number;
+}
+
+export interface LudoRollEvent {
+  slot: LudoSlot;
+  value: number;
+  seq: number;
 }
 
 export interface LudoGameState {
@@ -166,8 +172,10 @@ export interface LudoGameState {
   armCount: 4 | 6;
   players: LudoPlayerState[];
   turnSlot: LudoSlot;
-  phase: 'roll' | 'move';
+  phase: 'roll' | 'move' | 'passing';
   diceValue: number | null;
+  rollSeq: number;
+  lastRoll: LudoRollEvent | null;
   consecutiveSixes: number;
   movableTokenIndices: number[];
   scores: number[];
@@ -208,6 +216,7 @@ export interface LobbySummary {
   isPrivate: boolean;
   allowSpectators: boolean;
   soloPractice: boolean;
+  isLocalPassPlay?: boolean;
   status: LobbyStatus;
   players: LobbyPlayer[];
   spectatorCount: number;
